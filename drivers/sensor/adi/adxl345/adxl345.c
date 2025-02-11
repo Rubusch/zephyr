@@ -329,10 +329,19 @@ static int adxl345_sample_fetch(const struct device *dev,
 	int rc;
 
 	data->sample_number = 0;
-	rc = adxl345_reg_read_byte(dev, ADXL345_FIFO_STATUS_REG, &samples_count);
-	if (rc < 0) {
-		LOG_ERR("Failed to read FIFO status rc = %d\n", rc);
-		return rc;
+	samples_count = 1;
+
+	/*
+	 * FIFO BYPASSED is the only mode not using a FIFO buffer. Thus default
+	 * to a single sample for FIFO BYPASSED, for other modes read sample
+	 * count from the FIFO status register.
+	 */
+	if (data->fifo_config.fifo_mode != ADXL345_FIFO_BYPASSED) {
+		rc = adxl345_reg_read_byte(dev, ADXL345_FIFO_STATUS_REG, &samples_count);
+		if (rc < 0) {
+			LOG_ERR("Failed to read FIFO status rc = %d\n", rc);
+			return rc;
+		}
 	}
 
 	__ASSERT_NO_MSG(samples_count <= ARRAY_SIZE(data->bufx));
@@ -356,34 +365,35 @@ static int adxl345_channel_get(const struct device *dev,
 			       struct sensor_value *val)
 {
 	struct adxl345_dev_data *data = dev->data;
+	int idx;
 
 	if (data->sample_number >= ARRAY_SIZE(data->bufx)) {
 		data->sample_number = 0;
 	}
 
+	idx = (data->fifo_config.fifo_mode == ADXL345_FIFO_BYPASSED) ? 0
+		: data->sample_number;
+
 	switch (chan) {
 	case SENSOR_CHAN_ACCEL_X:
-		adxl345_accel_convert(val, data->bufx[data->sample_number]);
-		data->sample_number++;
+		adxl345_accel_convert(val, data->bufx[idx]);
 		break;
 	case SENSOR_CHAN_ACCEL_Y:
-		adxl345_accel_convert(val, data->bufy[data->sample_number]);
-		data->sample_number++;
+		adxl345_accel_convert(val, data->bufy[idx]);
 		break;
 	case SENSOR_CHAN_ACCEL_Z:
-		adxl345_accel_convert(val, data->bufz[data->sample_number]);
-		data->sample_number++;
+		adxl345_accel_convert(val, data->bufz[idx]);
 		break;
 	case SENSOR_CHAN_ACCEL_XYZ:
-		adxl345_accel_convert(val++, data->bufx[data->sample_number]);
-		adxl345_accel_convert(val++, data->bufy[data->sample_number]);
-		adxl345_accel_convert(val,   data->bufz[data->sample_number]);
-		data->sample_number++;
+		adxl345_accel_convert(val++, data->bufx[idx]);
+		adxl345_accel_convert(val++, data->bufy[idx]);
+		adxl345_accel_convert(val,   data->bufz[idx]);
 		break;
 	default:
 		return -ENOTSUP;
 	}
 
+	data->sample_number++;
 	return 0;
 }
 
