@@ -437,10 +437,8 @@ static int adxl345_interrupt_config(const struct device *dev,
 
 	ret = adxl345_reg_read_byte(dev, ADXL345_INT_MAP, &samples);
 	ret = adxl345_reg_read_byte(dev, ADXL345_INT_ENABLE, &samples);
-#ifdef CONFIG_ADXL345_TRIGGER
 	gpio_pin_interrupt_configure_dt(&cfg->interrupt,
 					      GPIO_INT_EDGE_TO_ACTIVE);
-#endif
 	return 0;
 }
 #endif
