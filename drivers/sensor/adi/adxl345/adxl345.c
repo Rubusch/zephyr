@@ -455,12 +455,11 @@ static int adxl345_init(const struct device *dev)
 {
 	int rc;
 	struct adxl345_dev_data *data = dev->data;
+	uint8_t dev_id;
+	bool is_full_res = true;
 #ifdef CONFIG_ADXL345_TRIGGER
 	const struct adxl345_dev_config *cfg = dev->config;
 #endif
-	uint8_t dev_id, full_res;
-
-	data->sample_number = 0;
 
 	if (!adxl345_bus_is_ready(dev)) {
 		LOG_ERR("bus not ready");
@@ -480,14 +479,17 @@ static int adxl345_init(const struct device *dev)
 		return -EIO;
 	}
 #endif
-
-	rc = adxl345_reg_write_byte(dev, ADXL345_DATA_FORMAT_REG, ADXL345_RANGE_8G);
+	rc = adxl345_reg_write_byte(dev, ADXL345_DATA_FORMAT_REG,
+				    data->selected_range |
+				    (is_full_res) ? ADXL345_DATA_FORMAT_FULL_RES : 0);
 	if (rc < 0) {
 		LOG_ERR("Data format set failed\n");
 		return -EIO;
 	}
 
+	data->sample_number = 0;
 	data->selected_range = ADXL345_RANGE_8G;
+	data->is_full_res = is_full_res;
 
 	rc = adxl345_reg_write_byte(dev, ADXL345_RATE_REG, ADXL345_RATE_25HZ);
 	if (rc < 0) {
@@ -496,13 +498,13 @@ static int adxl345_init(const struct device *dev)
 	}
 
 #ifdef CONFIG_ADXL345_TRIGGER
-	rc = adxl345_configure_fifo(dev, ADXL345_FIFO_STREAMED,
-				     ADXL345_INT2,
-				     SAMPLE_NUM);
+	rc = adxl345_configure_fifo(dev, ADXL345_FIFO_STREAMED, ADXL345_INT2, SAMPLE_NUM);
+#else
+	rc = adxl345_configure_fifo(dev, ADXL345_FIFO_BYPASSED, 0, 0);
+#endif
 	if (rc) {
 		return rc;
 	}
-#endif
 
 	rc = adxl345_reg_write_byte(dev, ADXL345_POWER_CTL_REG, ADXL345_ENABLE_MEASURE_BIT);
 	if (rc < 0) {
@@ -521,16 +523,9 @@ static int adxl345_init(const struct device *dev)
 	if (rc) {
 		return rc;
 	}
-	rc = adxl345_interrupt_config(dev, ADXL345_INT_MAP_WATERMARK_MSK);
-	if (rc) {
-		return rc;
-	}
+
+	return adxl345_interrupt_config(dev, ADXL345_INT_MAP_WATERMARK_MSK);
 #endif
-
-	rc = adxl345_reg_read_byte(dev, ADXL345_DATA_FORMAT_REG, &full_res);
-	uint8_t is_full_res_set = (full_res & ADXL345_DATA_FORMAT_FULL_RES) != 0;
-
-	data->is_full_res = is_full_res_set;
 	return 0;
 }
 
