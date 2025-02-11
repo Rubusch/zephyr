@@ -14,40 +14,50 @@ LOG_MODULE_DECLARE(ADXL345, CONFIG_SENSOR_LOG_LEVEL);
 
 static void adxl345_submit_fetch(struct rtio_iodev_sqe *iodev_sqe)
 {
-	const struct sensor_read_config *cfg =
+	const struct sensor_read_config *cfg_iodev =
 			(const struct sensor_read_config *) iodev_sqe->sqe.iodev->data;
-	const struct device *dev = cfg->sensor;
-	int rc;
+	const struct device *dev = cfg_iodev->sensor;
 	uint32_t min_buffer_len = sizeof(struct adxl345_dev_data);
 	uint8_t *buffer;
 	uint32_t buffer_len;
+	struct adxl345_xyz_accel_data *data;
+	int rc;
 
-	rc = rtio_sqe_rx_buf(iodev_sqe, min_buffer_len, min_buffer_len, &buffer, &buffer_len);
-	if (rc != 0) {
-		LOG_ERR("Failed to get a read buffer of size %u bytes", min_buffer_len);
-		rtio_iodev_sqe_err(iodev_sqe, rc);
-		return;
+LOG_INF("called"); // TODO rm
+
+	rc = rtio_sqe_rx_buf(iodev_sqe, min_buffer_len, min_buffer_len,
+			     &buffer, &buffer_len);
+	if (rc) {
+		LOG_ERR("Failed to get a read buffer of size %u bytes",
+			min_buffer_len);
+		goto err;
 	}
 
-	struct adxl345_sample *data = (struct adxl345_sample *)buffer;
+	data = (struct adxl345_xyz_accel_data *)buffer;
 
-	rc = adxl345_read_sample(dev, data);
-	if (rc != 0) {
+	rc = adxl345_get_accel_data(dev, data);
+	if (rc) {
 		LOG_ERR("Failed to fetch samples");
-		rtio_iodev_sqe_err(iodev_sqe, rc);
-		return;
+		goto err;
 	}
 
 	rtio_iodev_sqe_ok(iodev_sqe, 0);
+
+	return;
+err:
+	rtio_iodev_sqe_err(iodev_sqe, rc);
 }
 
 void adxl345_submit(const struct device *dev, struct rtio_iodev_sqe *iodev_sqe)
 {
-	const struct sensor_read_config *cfg =
-			(const struct sensor_read_config *) iodev_sqe->sqe.iodev->data;
+	struct rtio_work_req *req;
+	const struct sensor_read_config *cfg_iodev;
 
-	if (!cfg->is_streaming) {
-		struct rtio_work_req *req = rtio_work_req_alloc();
+LOG_INF("called"); // TODO rm
+
+	cfg_iodev = (const struct sensor_read_config *)iodev_sqe->sqe.iodev->data;
+	if (!cfg_iodev->is_streaming) {
+		req = rtio_work_req_alloc();
 
 		__ASSERT_NO_MSG(req);
 
@@ -57,4 +67,6 @@ void adxl345_submit(const struct device *dev, struct rtio_iodev_sqe *iodev_sqe)
 	} else {
 		rtio_iodev_sqe_err(iodev_sqe, -ENOTSUP);
 	}
+
+	LOG_INF("done"); // TODO rm
 }
