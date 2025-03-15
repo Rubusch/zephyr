@@ -450,6 +450,7 @@ static int adxl345_init(const struct device *dev)
 	uint8_t dev_id;
 	bool is_full_res = true;
 	const struct adxl345_dev_config *cfg = dev->config;
+	enum adxl345_fifo_mode fifo_mode = ADXL345_FIFO_BYPASSED;
 
 	if (!adxl345_bus_is_ready(dev)) {
 		LOG_ERR("bus not ready");
@@ -462,13 +463,19 @@ static int adxl345_init(const struct device *dev)
 		return -ENODEV;
 	}
 
-#if CONFIG_ADXL345_STREAM
-	rc = adxl345_reg_write_byte(dev, ADXL345_FIFO_CTL_REG, ADXL345_FIFO_STREAM_MODE);
-	if (rc < 0) {
-		LOG_ERR("FIFO enable failed\n");
-		return -EIO;
+	if (IS_ENABLED(CONFIG_ADXL345_TRIGGER)) {
+		fifo_mode = ADXL345_FIFO_TRIGGERED;
+	} else if (IS_ENABLED(CONFIG_ADXL345_STREAM)) {
+		fifo_mode = ADXL345_FIFO_STREAMED;
+
+		rc = adxl345_reg_write_byte(dev, ADXL345_FIFO_CTL_REG,
+					    ADXL345_FIFO_STREAM_MODE);
+		if (rc < 0) {
+			LOG_ERR("FIFO enable failed\n");
+			return -EIO;
+		}
 	}
-#endif
+
 	rc = adxl345_reg_write_byte(dev, ADXL345_DATA_FORMAT_REG,
 				    data->selected_range |
 				    (is_full_res) ? ADXL345_DATA_FORMAT_FULL_RES : 0);
@@ -487,7 +494,7 @@ static int adxl345_init(const struct device *dev)
 		return -EIO;
 	}
 
-	rc = adxl345_configure_fifo(dev, cfg->fifo_config.fifo_mode,
+	rc = adxl345_configure_fifo(dev, fifo_mode,
 				    cfg->fifo_config.fifo_trigger,
 				    cfg->fifo_config.fifo_samples);
 	if (rc) {
@@ -558,7 +565,7 @@ static int adxl345_init(const struct device *dev)
 
 #define ADXL345_CONFIG(inst)								\
 		.odr = DT_INST_PROP(inst, odr),						\
-		.fifo_config.fifo_mode = ADXL345_FIFO_STREAMED,				\
+		.fifo_config.fifo_mode = ADXL345_FIFO_BYPASSED,				\
 		.fifo_config.fifo_trigger = ADXL345_INT2,			\
 		.fifo_config.fifo_samples = SAMPLE_NUM,					\
 		.odr = ADXL345_RATE_25HZ,						\
