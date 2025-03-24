@@ -19,6 +19,7 @@ void adxl345_submit_stream(const struct device *dev, struct rtio_iodev_sqe *iode
 	const struct adxl345_dev_config *cfg_345 = dev->config;
 	uint8_t int_value = (uint8_t)~ADXL345_INT_MAP_WATERMARK_MSK;
 	uint8_t fifo_watermark_irq = 0;
+// TODO ->interrupt changed to gpio_int1 or gpio_int2
 	int rc = gpio_pin_interrupt_configure_dt(&cfg_345->interrupt,
 					      GPIO_INT_DISABLE);
 
@@ -53,7 +54,7 @@ void adxl345_submit_stream(const struct device *dev, struct rtio_iodev_sqe *iode
 				data->fifo_config.fifo_samples);
 		rc = adxl345_reg_read_byte(dev, ADXL345_FIFO_STATUS_REG, &status);
 	}
-
+// TODO ->interrupt changed to gpio_int1 or gpio_int2
 	rc = gpio_pin_interrupt_configure_dt(&cfg_345->interrupt,
 					      GPIO_INT_EDGE_TO_ACTIVE);
 	if (rc < 0) {
@@ -67,6 +68,7 @@ static void adxl345_irq_en_cb(struct rtio *r, const struct rtio_sqe *sqr, void *
 	const struct device *dev = (const struct device *)arg;
 	const struct adxl345_dev_config *cfg = dev->config;
 
+// TODO ->interrupt changed to gpio_int1 or gpio_int2
 	gpio_pin_interrupt_configure_dt(&cfg->interrupt, GPIO_INT_EDGE_TO_ACTIVE);
 }
 
@@ -112,6 +114,8 @@ static void adxl345_fifo_read_cb(struct rtio *rtio_ctx, const struct rtio_sqe *s
 	if (data->fifo_samples == 0) {
 		data->fifo_total_bytes = 0;
 		rtio_iodev_sqe_ok(iodev_sqe, 0);
+
+// TODO ->interrupt changed to gpio_int1 or gpio_int2
 		gpio_pin_interrupt_configure_dt(&cfg->interrupt, GPIO_INT_EDGE_TO_ACTIVE);
 	}
 
@@ -132,6 +136,8 @@ static void adxl345_process_fifo_samples_cb(struct rtio *r, const struct rtio_sq
 	/* Not inherently an underrun/overrun as we may have a buffer to fill next time */
 	if (current_sqe == NULL) {
 		LOG_ERR("No pending SQE");
+
+// TODO ->interrupt changed to gpio_int1 or gpio_int2
 		gpio_pin_interrupt_configure_dt(&cfg->interrupt, GPIO_INT_EDGE_TO_ACTIVE);
 		return;
 	}
@@ -145,6 +151,8 @@ static void adxl345_process_fifo_samples_cb(struct rtio *r, const struct rtio_sq
 	if (rtio_sqe_rx_buf(current_sqe, min_read_size, ideal_read_size, &buf, &buf_len) != 0) {
 		LOG_ERR("Failed to get buffer");
 		rtio_iodev_sqe_err(current_sqe, -ENOMEM);
+
+// TODO ->interrupt changed to gpio_int1 or gpio_int2
 		gpio_pin_interrupt_configure_dt(&cfg->interrupt, GPIO_INT_EDGE_TO_ACTIVE);
 		return;
 	}
@@ -254,6 +262,7 @@ static void adxl345_process_status1_cb(struct rtio *r, const struct rtio_sqe *sq
 		return;
 	}
 
+// TODO ->interrupt changed to gpio_int1 or gpio_int2
 	gpio_pin_interrupt_configure_dt(&cfg->interrupt, GPIO_INT_DISABLE);
 
 	struct sensor_stream_trigger *fifo_wmark_cfg = NULL;
@@ -273,6 +282,7 @@ static void adxl345_process_status1_cb(struct rtio *r, const struct rtio_sqe *sq
 	}
 
 	if (!fifo_full_irq) {
+// TODO ->interrupt changed to gpio_int1 or gpio_int2
 		gpio_pin_interrupt_configure_dt(&cfg->interrupt, GPIO_INT_EDGE_TO_ACTIVE);
 		return;
 	}
@@ -313,6 +323,8 @@ static void adxl345_process_status1_cb(struct rtio *r, const struct rtio_sqe *sq
 		if (rtio_sqe_rx_buf(current_sqe, sizeof(struct adxl345_fifo_data),
 				    sizeof(struct adxl345_fifo_data), &buf, &buf_len) != 0) {
 			rtio_iodev_sqe_err(current_sqe, -ENOMEM);
+
+// TODO ->interrupt changed to gpio_int1 or gpio_int2
 			gpio_pin_interrupt_configure_dt(&cfg->interrupt, GPIO_INT_EDGE_TO_ACTIVE);
 			return;
 		}
@@ -331,6 +343,7 @@ static void adxl345_process_status1_cb(struct rtio *r, const struct rtio_sqe *sq
 			adxl345_fifo_flush_rtio(dev);
 		}
 
+// TODO ->interrupt changed to gpio_int1 or gpio_int2
 		gpio_pin_interrupt_configure_dt(&cfg->interrupt, GPIO_INT_EDGE_TO_ACTIVE);
 		return;
 	}

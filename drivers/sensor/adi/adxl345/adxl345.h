@@ -233,7 +233,9 @@ struct adxl345_dev_config {
 	struct adxl345_fifo_config fifo_config;
 	uint8_t bus_type;
 #ifdef CONFIG_ADXL345_TRIGGER
-	struct gpio_dt_spec interrupt;
+//	struct gpio_dt_spec interrupt; // TODO rm
+	struct gpio_dt_spec gpio_int1;
+	struct gpio_dt_spec gpio_int2;
 #endif
 };
 
