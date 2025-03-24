@@ -49,9 +49,9 @@ static void adxl345_gpio_callback(const struct device *dev,
 
 	gpio_pin_interrupt_configure_dt(&cfg->interrupt, GPIO_INT_DISABLE);
 
-	if (IS_ENABLED(CONFIG_ADXL345_STREAM)) {
+//	if (IS_ENABLED(CONFIG_ADXL345_STREAM)) { // TODO rm
 		adxl345_stream_irq_handler(drv_data->dev);
-	}
+//	} // TODO rm
 
 #if defined(CONFIG_ADXL345_TRIGGER_OWN_THREAD)
 	k_sem_give(&drv_data->gpio_sem);

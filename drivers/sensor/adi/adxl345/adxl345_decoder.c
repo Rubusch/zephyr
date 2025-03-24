@@ -86,7 +86,7 @@ static inline void adxl345_accel_convert_q31(q31_t *out, int16_t sample, int32_t
 	}
 }
 
-#ifdef CONFIG_ADXL345_STREAM
+//#ifdef CONFIG_ADXL345_STREAM // TODO rm
 
 #define SENSOR_SCALING_FACTOR (SENSOR_G / (16 * 1000 / 100))
 
@@ -167,7 +167,7 @@ static int adxl345_decode_stream(const uint8_t *buffer, struct sensor_chan_spec 
 	return count;
 }
 
-#endif /* CONFIG_ADXL345_STREAM */
+//#endif /* CONFIG_ADXL345_STREAM */ // TODO rm
 
 static int adxl345_decoder_get_frame_count(const uint8_t *buffer, struct sensor_chan_spec chan_spec,
 					   uint16_t *frame_count)
@@ -178,11 +178,11 @@ static int adxl345_decoder_get_frame_count(const uint8_t *buffer, struct sensor_
 		return ret;
 	}
 
-#ifdef CONFIG_ADXL345_STREAM
+//#ifdef CONFIG_ADXL345_STREAM // TODO rm
 	const struct adxl345_fifo_data *data = (const struct adxl345_fifo_data *)buffer;
 
 	if (!data->is_fifo) {
-#endif /* CONFIG_ADXL345_STREAM */
+//#endif /* CONFIG_ADXL345_STREAM */ // TODO rm
 		switch (chan_spec.chan_type) {
 		case SENSOR_CHAN_ACCEL_X:
 		case SENSOR_CHAN_ACCEL_Y:
@@ -195,7 +195,7 @@ static int adxl345_decoder_get_frame_count(const uint8_t *buffer, struct sensor_
 		default:
 			break;
 		}
-#ifdef CONFIG_ADXL345_STREAM
+//#ifdef CONFIG_ADXL345_STREAM // TODO rm
 	} else {
 		if (data->fifo_byte_count == 0) {
 			*frame_count = 0;
@@ -213,7 +213,7 @@ static int adxl345_decoder_get_frame_count(const uint8_t *buffer, struct sensor_
 			}
 		}
 	}
-#endif /* CONFIG_ADXL345_STREAM */
+//#endif /* CONFIG_ADXL345_STREAM */ // TODO rm
 
 	return ret;
 }
@@ -256,11 +256,11 @@ static int adxl345_decoder_decode(const uint8_t *buffer, struct sensor_chan_spec
 {
 	const struct adxl345_sample *data = (const struct adxl345_sample *)buffer;
 
-#ifdef CONFIG_ADXL345_STREAM
+//#ifdef CONFIG_ADXL345_STREAM // TODO rm
 	if (data->is_fifo) {
 		return adxl345_decode_stream(buffer, chan_spec, fit, max_count, data_out);
 	}
-#endif /* CONFIG_ADXL345_STREAM */
+//#endif /* CONFIG_ADXL345_STREAM */ // TODO rm
 
 	return adxl345_decode_sample(data, chan_spec, fit, max_count, data_out);
 }

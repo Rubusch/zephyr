@@ -463,19 +463,6 @@ static int adxl345_init(const struct device *dev)
 		return -ENODEV;
 	}
 
-	if (IS_ENABLED(CONFIG_ADXL345_TRIGGER)) {
-		fifo_mode = ADXL345_FIFO_TRIGGERED;
-	} else if (IS_ENABLED(CONFIG_ADXL345_STREAM)) {
-		fifo_mode = ADXL345_FIFO_STREAMED;
-
-		rc = adxl345_reg_write_byte(dev, ADXL345_FIFO_CTL_REG,
-					    ADXL345_FIFO_STREAM_MODE);
-		if (rc < 0) {
-			LOG_ERR("FIFO enable failed\n");
-			return -EIO;
-		}
-	}
-
 	rc = adxl345_reg_write_byte(dev, ADXL345_DATA_FORMAT_REG,
 				    data->selected_range |
 				    (is_full_res) ? ADXL345_DATA_FORMAT_FULL_RES : 0);
@@ -493,6 +480,21 @@ static int adxl345_init(const struct device *dev)
 		LOG_ERR("Rate setting failed\n");
 		return -EIO;
 	}
+
+/* // TODO rework
+	if (IS_ENABLED(CONFIG_ADXL345_TRIGGER)) {
+		fifo_mode = ADXL345_FIFO_TRIGGERED;
+	} else if (IS_ENABLED(CONFIG_ADXL345_STREAM)) {
+		fifo_mode = ADXL345_FIFO_STREAMED;
+
+		rc = adxl345_reg_write_byte(dev, ADXL345_FIFO_CTL_REG,
+					    ADXL345_FIFO_STREAM_MODE);
+		if (rc < 0) {
+			LOG_ERR("FIFO enable failed\n");
+			return -EIO;
+		}
+	}
+// */
 
 	rc = adxl345_configure_fifo(dev, fifo_mode,
 				    cfg->fifo_config.fifo_trigger,
@@ -598,7 +600,7 @@ static int adxl345_init(const struct device *dev)
 	}
 
 #define ADXL345_DEFINE(inst)								\
-	IF_ENABLED(CONFIG_ADXL345_STREAM, (ADXL345_RTIO_DEFINE(inst)));                 \
+	/* IF_ENABLED(CONFIG_ADXL345_STREAM, (ADXL345_RTIO_DEFINE(inst))); TODO rm   */              \
 	static struct adxl345_dev_data adxl345_data_##inst = {                  \
 	COND_CODE_1(adxl345_iodev_##inst, (.rtio_ctx = &adxl345_rtio_ctx_##inst,        \
 				.iodev = &adxl345_iodev_##inst,), ()) \
