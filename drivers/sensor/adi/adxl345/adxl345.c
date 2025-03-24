@@ -527,11 +527,25 @@ static int adxl345_init(const struct device *dev)
 }
 
 #ifdef CONFIG_ADXL345_TRIGGER
-#define ADXL345_CFG_IRQ(inst) \
-		.interrupt = GPIO_DT_SPEC_INST_GET(inst, int2_gpios),
+/* #define ADXL345_CFG_IRQ(inst) \
+		.interrupt = GPIO_DT_SPEC_INST_GET(inst, int2_gpios), */ // TODO rm
+	.gpio_int1 = GPIO_DT_SPEC_INST_GET_OR(inst, int1_gpios, {0}),	\
+	.gpio_int2 = GPIO_DT_SPEC_INST_GET_OR(inst, int2_gpios, {0}),
+/* TODO	.drdy_pad = DT_INST_PROP_OR(inst, drdy_int_pad, -1), ADXL345_CFG_IRQ_THRESHOLD(inst) */
+
 #else
 #define ADXL345_CFG_IRQ(inst)
 #endif /* CONFIG_ADXL345_TRIGGER */
+
+// TODO use, or remove
+#define ADXL345_CONFIG_COMMON(inst)	\
+	.range = DT_INST_PROP(inst, range),	\
+	IF_ENABLED(UTIL_OR(DT_INST_NODE_HAS_PROP(inst, int1_gpios),	\
+				DT_INST_NODE_HAS_PROP(inst, int2_gpios)),	\
+			(ADXL345_CFG_IRQ(inst)))
+
+
+
 
 #define ADXL345_RTIO_SPI_DEFINE(inst)   \
 	COND_CODE_1(CONFIG_SPI_RTIO,    \
@@ -585,7 +599,8 @@ static int adxl345_init(const struct device *dev)
 		.bus_type = ADXL345_BUS_SPI,       \
 		ADXL345_CONFIG(inst)					\
 		COND_CODE_1(DT_INST_NODE_HAS_PROP(inst, int2_gpios),	\
-		(ADXL345_CFG_IRQ(inst)), ())				\
+		(ADXL345_CFG_IRQ(inst)), ())	\
+/*		(ADXL345_CFG_IRQ(inst)), ())	TODO rm */		\
 	}
 
 #define ADXL345_CONFIG_I2C(inst)			    \
@@ -596,7 +611,8 @@ static int adxl345_init(const struct device *dev)
 		.bus_type = ADXL345_BUS_I2C,                \
 		ADXL345_CONFIG(inst)					\
 		COND_CODE_1(DT_INST_NODE_HAS_PROP(inst, int2_gpios),	\
-		(ADXL345_CFG_IRQ(inst)), ())		\
+		(ADXL345_CFG_IRQ(inst)), ())	\
+/*		(ADXL345_CFG_IRQ(inst)), ())	TODO rm */		\
 	}
 
 #define ADXL345_DEFINE(inst)								\
