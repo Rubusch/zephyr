@@ -4,6 +4,27 @@
 include: sensor-device.yaml
 
 properties:
+  int1-gpios:
+    type: phandle-array
+    description: |
+      The pin defaults to active high when produced by the sensor. The property
+      specifies the INT_1 line of the sensor.
+
+  int2-gpios:
+    type: phandle-array
+    description: |
+      The pin defaults to active high when produced by the sensor. The property
+      specifies the INT_2 line of the sensor.
+
+  drdy-int-pad:
+    type: int
+    enum: [1, 2]
+    description: |
+      Specify which of the two interrupt lines (INT_1 or INT_2), if any,
+      delivers the data ready signal.
+      - 1
+      - 2
+
   odr:
     type: int
     default: 0
