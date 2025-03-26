@@ -43,3 +43,12 @@ properties:
       - 3
       - 4
       - 5
+
+## TODO threshold-int-pad?
+## TODO tap-int-pad
+## TODO tap2-int-pad
+## TODO ff-int-pad
+## TODO act-int-pad
+## TODO inact-int-pad
+
+## TODO range

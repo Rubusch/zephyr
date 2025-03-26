@@ -14,6 +14,7 @@
 #include "adxl345.h"
 
 #include <zephyr/logging/log.h>
+
 LOG_MODULE_DECLARE(ADXL345, CONFIG_SENSOR_LOG_LEVEL);
 
 static int adxl345_set_int_pad_state(const struct device *dev,
@@ -32,52 +33,56 @@ static int adxl345_set_int_pad_state(const struct device *dev,
 	}
 }
 
-static int adxl345_enable_int(const struct device *dev,
-			      const struct sensor_trigger *trig,
-			      int enable)
-{
-	const struct adxl345_dev_config *cfg = dev->config;
-// TODO ctx
-
-	switch (trig->type) {
-	case SENSOR_TRIG_DATA_READY:
-		if (cfg->drdy_pad == 1) {
-			/* route DRDY to PAD1 */
-			if (adxl345_pin_int1_route_set(ctx, ADXL345_PAD1_DRDY) != 0) {
-				return -EIO;
-			}
-		} else if (cfg->drdy_pad == 2) {
-			if  (adxl345_pin_int2_route_set(ctx, ADXL345_PAD2_DRDY) != 0) {
-				return -EIO;
-			}
-		} else {
-			LOG_ERR("Failed, no interrupt pin configured for data ready (DRDY) in DT");
-			return -ENOTSUP;
-		}
-		return adxl345_set_int_pad_state(dev, cfg->drdy_pad, enable);
-	default:
-		LOG_ERR("Failed, unsupported trigger interrupt route %d", trig->type);
-		return -ENOTSUP;
-	}
-
-	return 0;
-}
+// // TODO fix ctx [st] for [analog]
+// static int adxl345_enable_int(const struct device *dev,
+// 			      const struct sensor_trigger *trig,
+// 			      int enable)
+// {
+// 	const struct adxl345_dev_config *cfg = dev->config;
+// // TODO ctx
+// 
+// 	switch (trig->type) {
+// 	case SENSOR_TRIG_DATA_READY:
+// 		if (cfg->drdy_pad == 1) {
+// 			/* route DRDY to PAD1 */
+// 			if (adxl345_pin_int1_route_set(ctx, ADXL345_PAD1_DRDY) != 0) {
+// 				return -EIO;
+// 			}
+// 		} else if (cfg->drdy_pad == 2) {
+// 			if  (adxl345_pin_int2_route_set(ctx, ADXL345_PAD2_DRDY) != 0) {
+// 				return -EIO;
+// 			}
+// 		} else {
+// 			LOG_ERR("Failed, no interrupt pin configured for data ready (DRDY) in DT");
+// 			return -ENOTSUP;
+// 		}
+// 		return adxl345_set_int_pad_state(dev, cfg->drdy_pad, enable);
+// 	default:
+// 		LOG_ERR("Failed, unsupported trigger interrupt route %d", trig->type);
+// 		return -ENOTSUP;
+// 	}
+// 
+// 	return 0;
+// }
 
 #if defined(CONFIG_ADXL345_TRIGGER_OWN_THREAD) || defined(CONFIG_ADXL345_TRIGGER_GLOBAL_THREAD)
 static void adxl345_thread_cb(const struct device *dev)
 {
 	const struct adxl345_dev_config *cfg = dev->config;
 	struct adxl345_dev_data *drv_data = dev->data;
-	uint8_t status1;
+	uint8_t status;
 	int ret;
 
 	/* Clear the status */
-	if (adxl345_get_status(dev, &status1, NULL) < 0) {
+	if (adxl345_get_status(dev, &status, NULL) < 0) {
 		return;
 	}
 
+	// TODO clear fifo status as well
+// TODO rework according to what is more commmon, FIELD_GET() or this bitbanging
+// approach
 	if ((drv_data->drdy_handler != NULL) &&
-		ADXL345_STATUS_DATA_RDY(status1)) {
+		ADXL345_STATUS_DATA_RDY(status)) {
 		drv_data->drdy_handler(dev, drv_data->drdy_trigger);
 	}
 
