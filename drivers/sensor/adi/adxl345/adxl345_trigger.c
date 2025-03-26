@@ -66,7 +66,7 @@ static int adxl345_set_int_pad_state(const struct device *dev,
 // }
 
 #if defined(CONFIG_ADXL345_TRIGGER_OWN_THREAD) || defined(CONFIG_ADXL345_TRIGGER_GLOBAL_THREAD)
-static void adxl345_thread_cb(const struct device *dev)
+static void adxl345_handle_interrupt(const struct device *dev)
 {
 	const struct adxl345_dev_config *cfg = dev->config;
 	struct adxl345_dev_data *drv_data = dev->data;
@@ -74,28 +74,25 @@ static void adxl345_thread_cb(const struct device *dev)
 	int ret;
 
 	/* Clear the status */
+// TODO  fetch status1(int) and status2(fifo)
+// TODO clear fifo status as well
 	if (adxl345_get_status(dev, &status, NULL) < 0) {
 		return;
 	}
 
-	// TODO clear fifo status as well
-// TODO rework according to what is more commmon, FIELD_GET() or this bitbanging
-// approach
+// TODO th_handler
+
 	if ((drv_data->drdy_handler != NULL) &&
 		ADXL345_STATUS_DATA_RDY(status)) {
 		drv_data->drdy_handler(dev, drv_data->drdy_trigger);
 	}
 
-	ret = gpio_pin_interrupt_configure_dt(&cfg->interrupt,
-					      GPIO_INT_EDGE_TO_ACTIVE);
+	ret = adxl345_set_int_pad_state(drv_data->dev, cfg->drdy_pad, true);
+//	ret = gpio_pin_interrupt_configure_dt(&cfg->interrupt, //  TODO rm
+//					      GPIO_INT_EDGE_TO_ACTIVE); // TODO rm
 	__ASSERT(ret == 0, "Interrupt configuration failed");
 }
 #endif
-
-static void adxl345_handle_interrupt(const struct device *dev)
-{
-// TODO XXX
-}
 
 static void adxl345_int1_gpio_callback(const struct device *dev,
 				       struct gpio_callback *cb,
@@ -129,7 +126,7 @@ static void adxl345_int2_gpio_callback(const struct device *dev,
 
 	ARG_UNUSED(pins);
 
-	adxl345_set_int_pad_state(drv_dta->dev, 1, true);
+	adxl345_set_int_pad_state(drv_dta->dev, 2, true);
 
 //	const struct adxl345_dev_config *cfg = drv_data->dev->config; // TODO rm
 //	gpio_pin_interrupt_configure_dt(&cfg->interrupt, GPIO_INT_DISABLE); // TODO rm
@@ -155,7 +152,7 @@ static void adxl345_thread(void *p1, void *p2, void *p3)
 
 	while (true) {
 		k_sem_take(&drv_data->gpio_sem, K_FOREVER);
-		adxl345_thread_cb(drv_data->dev);
+		adxl345_handle_interrupt(drv_data->dev);
 	}
 }
 
@@ -165,7 +162,7 @@ static void adxl345_work_cb(struct k_work *work)
 	struct adxl345_dev_data *drv_data =
 		CONTAINER_OF(work, struct adxl345_dev_data, work);
 
-	adxl345_thread_cb(drv_data->dev);
+	adxl345_handle_interrupt(drv_data->dev);
 }
 #endif
 
@@ -179,6 +176,7 @@ int adxl345_trigger_set(const struct device *dev,
 	const struct adxl345_dev_config *cfg = dev->config;
 	struct adxl345_dev_data *drv_data = dev->data;
 	uint8_t int_mask, int_en, status1;
+	int enable = (handler != NULL) ? PROPERTY_ENABLE : PROPERTY_DISABLE;
 	int ret;
 
 	if (!cfg->gpio_int1.port && !cfg->gpio_int2.port) {
@@ -201,7 +199,7 @@ int adxl345_trigger_set(const struct device *dev,
 		LOG_ERR("Unsupported sensor trigger");
 		return -ENOTSUP;
 	}
-
+	
 	/* map requested interrupt events for this interrupt gpio line */
 	if (handler) {
 		int_en = int_mask;
@@ -222,9 +220,9 @@ int adxl345_trigger_set(const struct device *dev,
 		return ret;
 	}
 
-// TODO needed?
-	ret = gpio_pin_interrupt_configure_dt(&cfg->interrupt,
-					      GPIO_INT_EDGE_TO_ACTIVE);
+	ret = adxl345_set_int_pad_state(drv_data->dev, cfg->threshold_pad, enable); // TODO
+//	ret = gpio_pin_interrupt_configure_dt(&cfg->interrupt,
+//					      GPIO_INT_EDGE_TO_ACTIVE);
 	if (ret < 0) {
 		return ret;
 	}

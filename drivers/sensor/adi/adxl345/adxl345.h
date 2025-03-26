@@ -161,6 +161,7 @@ struct adxl345_dev_data {
 //	struct gpio_callback gpio_cb; // TODO rm
 	struct gpio_callback int1_cb;
 	struct gpio_callback int2_cb;
+	uint8_t drdy_pad;
 
 	sensor_trigger_handler_t th_handler;
 	const struct sensor_trigger *th_trigger;
