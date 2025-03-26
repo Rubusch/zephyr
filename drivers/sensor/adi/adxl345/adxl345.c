@@ -160,7 +160,7 @@ int adxl345_get_status(const struct device *dev,
 
  * @return 0 in case of success, negative error code otherwise.
  */
-int adxl345_configure_fifo(const struct device *dev,
+int adxl345_configure_fifo_regs(const struct device *dev,
 				  enum adxl345_fifo_mode mode,
 				  enum adxl345_fifo_trigger trigger,
 				  uint16_t fifo_samples)
@@ -414,31 +414,50 @@ static DEVICE_API(sensor, adxl345_api_funcs) = {
 /**
  * Configure the INT1 and INT2 interrupt pins.
  * @param dev - The device structure.
- * @param int1 -  INT1 interrupt pins.
+ * @param events - Bitfield of the sensor events to enable.
  * @return 0 in case of success, negative error code otherwise.
  */
-static int adxl345_interrupt_config(const struct device *dev,
-				    uint8_t int1)
+static int adxl345_configure_interrupt_regs(const struct device *dev,
+					 uint8_t events)
 {
-	int ret;
 	const struct adxl345_dev_config *cfg = dev->config;
-
-	ret = adxl345_reg_write_byte(dev, ADXL345_INT_MAP, int1);
-	if (ret) {
-		return ret;
-	}
-
-	ret = adxl345_reg_write_byte(dev, ADXL345_INT_ENABLE, int1);
-	if (ret) {
-		return ret;
-	}
-
 	uint8_t samples;
+	int ret;
+	
+// TODO int_line -> mech to set int1 or int2 active interrupt from dev or dev->config
 
-	ret = adxl345_reg_read_byte(dev, ADXL345_INT_MAP, &samples);
-	ret = adxl345_reg_read_byte(dev, ADXL345_INT_ENABLE, &samples);
-	gpio_pin_interrupt_configure_dt(&cfg->interrupt,
-					      GPIO_INT_EDGE_TO_ACTIVE);
+	/* Map events to interrupt line */
+// TODO obtain mapping from enabled events in DT
+// TODO obtain mapping of drdy in DT
+	ret = adxl345_reg_write_byte(dev, ADXL345_INT_MAP, int_line ? 0xff : 0);
+	if (ret) {
+		return ret;
+	}
+
+	/* Enable selected interrupt event */
+	ret = adxl345_reg_write_byte(dev, ADXL345_INT_ENABLE,
+			int_line ? events : ^events);
+	if (ret) {
+		return ret;
+	}
+
+// TODO rm
+//	ret = adxl345_reg_read_byte(dev, ADXL345_INT_MAP, &samples);
+//	if (ret) {
+//		return ret;		
+//	}
+//	
+//	ret = adxl345_reg_read_byte(dev, ADXL345_INT_ENABLE, &samples);
+//	if (ret) {
+//		return ret;
+//	}
+
+// TODO rm, needed here, or better in _init_interrupt()???
+//	ret = gpio_pin_interrupt_configure_dt(&cfg->interrupt, GPIO_INT_EDGE_TO_ACTIVE);
+//	if (ret < 0) {
+//		return ret;
+//	}
+
 	return 0;
 }
 #endif
@@ -448,71 +467,31 @@ static int adxl345_init(const struct device *dev)
 	int rc;
 	struct adxl345_dev_data *data = dev->data;
 	uint8_t dev_id;
-	bool is_full_res = true;
+//	bool is_full_res = true; // TODO make range adjustable in DT, until do full range
 	const struct adxl345_dev_config *cfg = dev->config;
-	enum adxl345_fifo_mode fifo_mode = ADXL345_FIFO_BYPASSED;
+	enum adxl345_fifo_mode fifo_mode; // TODO make dependend on gpio available
 
 	if (!adxl345_bus_is_ready(dev)) {
 		LOG_ERR("bus not ready");
 		return -ENODEV;
 	}
 
+	/* check chip ID */
 	rc = adxl345_reg_read_byte(dev, ADXL345_DEVICE_ID_REG, &dev_id);
 	if (rc < 0 || dev_id != ADXL345_PART_ID) {
-		LOG_ERR("Read PART ID failed: 0x%x\n", rc);
+		LOG_ERR("Invalid chip ID or reading bus failed: 0x%x\n", rc);
 		return -ENODEV;
 	}
 
+	/* reset the sensor */
+// TODO
+
+	/* configure sensor */
 	rc = adxl345_reg_write_byte(dev, ADXL345_DATA_FORMAT_REG,
 				    data->selected_range |
-				    (is_full_res) ? ADXL345_DATA_FORMAT_FULL_RES : 0);
+				    ADXL345_DATA_FORMAT_FULL_RES);
 	if (rc < 0) {
 		LOG_ERR("Data format set failed\n");
-		return -EIO;
-	}
-
-	data->sample_number = 0;
-	data->selected_range = ADXL345_RANGE_8G;
-	data->is_full_res = is_full_res;
-
-	rc = adxl345_reg_write_byte(dev, ADXL345_RATE_REG, ADXL345_RATE_25HZ);
-	if (rc < 0) {
-		LOG_ERR("Rate setting failed\n");
-		return -EIO;
-	}
-
-/* // TODO rework
-	if (IS_ENABLED(CONFIG_ADXL345_TRIGGER)) {
-		fifo_mode = ADXL345_FIFO_TRIGGERED;
-	} else if (IS_ENABLED(CONFIG_ADXL345_STREAM)) {
-		fifo_mode = ADXL345_FIFO_STREAMED;
-
-		rc = adxl345_reg_write_byte(dev, ADXL345_FIFO_CTL_REG,
-					    ADXL345_FIFO_STREAM_MODE);
-		if (rc < 0) {
-			LOG_ERR("FIFO enable failed\n");
-			return -EIO;
-		}
-	}
-// */
-
-	rc = adxl345_configure_fifo(dev, fifo_mode,
-				    cfg->fifo_config.fifo_trigger,
-				    cfg->fifo_config.fifo_samples);
-	if (rc) {
-		return rc;
-	}
-
-	rc = adxl345_reg_write_byte(dev, ADXL345_POWER_CTL_REG, ADXL345_ENABLE_MEASURE_BIT);
-	if (rc < 0) {
-		LOG_ERR("Enable measure bit failed\n");
-		return -EIO;
-	}
-
-#ifdef CONFIG_ADXL345_TRIGGER
-	rc = adxl345_init_interrupt(dev);
-	if (rc < 0) {
-		LOG_ERR("Failed to initialize interrupt!");
 		return -EIO;
 	}
 
@@ -521,9 +500,46 @@ static int adxl345_init(const struct device *dev)
 		return rc;
 	}
 
-	return adxl345_interrupt_config(dev, ADXL345_INT_MAP_WATERMARK_MSK);
+	data->sample_number = 0;
+	data->selected_range = ADXL345_RANGE_8G; // TODO set full range, until adjustable in DT
+	data->is_full_res = true; // TODO set full range, until adjustable in DT
+
+	rc = adxl345_reg_write_byte(dev, ADXL345_RATE_REG, ADXL345_RATE_25HZ);
+	if (rc < 0) {
+		LOG_ERR("Rate setting failed\n");
+		return -EIO;
+	}
+
+	k_sleep(K_MSEC(100)); // TODO check if _really needed
+
+	rc = adxl345_init_interrupt(dev);
+	if (rc == 0) {
+		fifo_mode = ADXL345_FIFO_STREAMED;
+// TODO distinguish further STREAM and TRIGGER
+	} else {
+		/* fallback */
+		fifo_mode = ADXL345_FIFO_BYPASSED;
+	}
+
+// TODO simplify arguments
+	rc = adxl345_configure_fifo_regs(dev, fifo_mode,
+					 cfg->fifo_config.fifo_trigger,
+					 cfg->fifo_config.fifo_samples);
+	if (rc) {
+		return rc;
+	}
+
+#ifdef CONFIG_ADXL345_TRIGGER
+	rc = adxl345_configure_interrupt_regs(dev, ADXL345_INT_MAP_WATERMARK_MSK);
+	if (rc) {
+		LOG_ERR("Failed to configure interrupt events!");
+		return -EIO;
+	}
 #endif
-	return 0;
+
+	/* start measuring */
+	return adxl345_reg_write_byte(dev, ADXL345_POWER_CTL_REG,
+				      ADXL345_ENABLE_MEASURE_BIT);
 }
 
 #ifdef CONFIG_ADXL345_TRIGGER
@@ -539,7 +555,7 @@ static int adxl345_init(const struct device *dev)
 
 // TODO use, or remove
 #define ADXL345_CONFIG_COMMON(inst)	\
-	.range = DT_INST_PROP(inst, range),	\
+/* TODO range:	.range = DT_INST_PROP(inst, range), */	\
 	IF_ENABLED(UTIL_OR(DT_INST_NODE_HAS_PROP(inst, int1_gpios),	\
 				DT_INST_NODE_HAS_PROP(inst, int2_gpios)),	\
 			(ADXL345_CFG_IRQ(inst)))
@@ -599,7 +615,7 @@ static int adxl345_init(const struct device *dev)
 		.bus_type = ADXL345_BUS_SPI,       \
 		ADXL345_CONFIG(inst)					\
 		COND_CODE_1(DT_INST_NODE_HAS_PROP(inst, int2_gpios),	\
-		(ADXL345_CFG_IRQ(inst)), ())	\
+		(ADXL345_CONFIG_COMMON(inst)), ())	\
 /*		(ADXL345_CFG_IRQ(inst)), ())	TODO rm */		\
 	}
 
@@ -611,7 +627,7 @@ static int adxl345_init(const struct device *dev)
 		.bus_type = ADXL345_BUS_I2C,                \
 		ADXL345_CONFIG(inst)					\
 		COND_CODE_1(DT_INST_NODE_HAS_PROP(inst, int2_gpios),	\
-		(ADXL345_CFG_IRQ(inst)), ())	\
+		(ADXL345_CONFIG_COMMON(inst)), ())	\
 /*		(ADXL345_CFG_IRQ(inst)), ())	TODO rm */		\
 	}
 

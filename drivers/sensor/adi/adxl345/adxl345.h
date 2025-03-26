@@ -64,9 +64,9 @@
 
 #define ADXL345_MAX_FIFO_SIZE      32
 
-#define ADXL345_INT_ENABLE 0x2Eu
-#define ADXL345_INT_MAP    0x2Fu
-#define ADXL345_INT_SOURCE 0x30u
+#define ADXL345_INT_ENABLE		0x2E
+#define ADXL345_INT_MAP			0x2F
+#define ADXL345_INT_SOURCE		0x30
 
 /* ADXL345_STATUS_1 */
 #define ADXL345_STATUS_DOUBLE_TAP(x) (((x) >> 5) & 0x1)
@@ -158,13 +158,15 @@ struct adxl345_dev_data {
 	uint8_t selected_range;
 	enum adxl345_odr odr;
 #ifdef CONFIG_ADXL345_TRIGGER
-	struct gpio_callback gpio_cb;
+//	struct gpio_callback gpio_cb; // TODO rm
+	struct gpio_callback int1_cb;
+	struct gpio_callback int2_cb;
 
 	sensor_trigger_handler_t th_handler;
 	const struct sensor_trigger *th_trigger;
 	sensor_trigger_handler_t drdy_handler;
 	const struct sensor_trigger *drdy_trigger;
-	const struct device *dev;
+//	const struct device *dev; // TODO rm, needed?
 
 #if defined(CONFIG_ADXL345_TRIGGER_OWN_THREAD)
 	K_KERNEL_STACK_MEMBER(thread_stack, CONFIG_ADXL345_THREAD_STACK_SIZE);
