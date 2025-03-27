@@ -125,22 +125,39 @@ static inline bool adxl345_bus_is_ready(const struct device *dev)
 	return cfg->bus_is_ready(&cfg->bus);
 }
 
-int adxl345_get_status(const struct device *dev,
-			   uint8_t *status1,
-			   uint16_t *fifo_entries)
+int adxl345_get_fifo_status(const struct device *dev, uint8_t *fifo_entries)
 {
-	uint8_t buf[2], length = 1U;
+	uint8_t regval;
 	int ret;
 
-	ret = adxl345_reg_read(dev, ADXL345_INT_SOURCE, buf, length);
-
-	*status1 = buf[0];
-	ret = adxl345_reg_read(dev, ADXL345_FIFO_STATUS_REG, buf+1, length);
-	if (fifo_entries) {
-		*fifo_entries = buf[1] & 0x3F;
+	ret = adxl345_reg_read_byte(dev, ADXL345_FIFO_STATUS_REG, &regval);
+	if (ret) {
+		return ret;
 	}
 
-	return ret;
+	*fifo_entries = FIELD_GET(ADXL345_FIFO_COUNT_MASK, regval);
+
+	return 0;
+}
+
+int adxl345_get_status(const struct device *dev, uint8_t *status)
+//			   ,
+//			   uint16_t *fifo_entries)
+{
+//	uint8_t buf[2], length = 1U; // TODO rm
+//	int ret;
+
+//	ret = adxl345_reg_read(dev, ADXL345_INT_SOURCE, buf, length); // TODO rm
+	return adxl345_reg_read_byte(dev, ADXL345_INT_SOURCE, status);
+
+//	*status = buf[0];
+//	ret = adxl345_reg_read(dev, ADXL345_FIFO_STATUS_REG, buf+1, length); // TODO rm
+
+//	if (fifo_entries) { // TODO why checking int status, but passing NULL here?
+//		*fifo_entries = buf[1] & ADXL345_FIFO_COUNT_MASK; // TODO rm
+//	}
+//
+//	return ret;
 }
 
 /**
@@ -280,13 +297,14 @@ int adxl345_read_sample(const struct device *dev,
 			       struct adxl345_sample *sample)
 {
 	int16_t raw_x, raw_y, raw_z;
-	uint8_t axis_data[6], status1;
+	uint8_t axis_data[6], status, fifo_status;
 	struct adxl345_dev_data *data = dev->data;
 
 	if (!IS_ENABLED(CONFIG_ADXL345_TRIGGER)) {
 		do {
-			adxl345_get_status(dev, &status1, NULL);
-		} while (!(ADXL345_STATUS_DATA_RDY(status1)));
+//			adxl345_get_status(dev, &status, &fifo_status); // TODO rm
+			adxl345_get_status(dev, &status);
+		} while (!(ADXL345_STATUS_DATA_RDY(status)));
 	}
 
 	int rc = adxl345_reg_read(dev, ADXL345_X_AXIS_DATA_0_REG, axis_data, 6);

@@ -74,13 +74,12 @@ static void adxl345_handle_interrupt(const struct device *dev)
 	int ret;
 
 	/* Clear the status */
-// TODO  fetch status1(int) and status2(fifo)
+// TODO  fetch status(int) and status2(fifo)
 // TODO clear fifo status as well
-	if (adxl345_get_status(dev, &status, NULL) < 0) {
+//	if (adxl345_get_status(dev, &status, NULL) < 0) {
+	if (adxl345_get_status(dev, &status) < 0) {
 		return;
 	}
-
-// TODO th_handler
 
 	if ((drv_data->drdy_handler != NULL) &&
 		ADXL345_STATUS_DATA_RDY(status)) {
@@ -175,7 +174,7 @@ int adxl345_trigger_set(const struct device *dev,
 {
 	const struct adxl345_dev_config *cfg = dev->config;
 	struct adxl345_dev_data *drv_data = dev->data;
-	uint8_t int_mask, int_en, status1;
+	uint8_t int_mask, int_en, status;
 	int enable = (handler != NULL) ? PROPERTY_ENABLE : PROPERTY_DISABLE;
 	int ret;
 
@@ -215,7 +214,8 @@ int adxl345_trigger_set(const struct device *dev,
 	/* Clear status */
 // TODO move to init: clear int status
 // TODO also clear fifo status
-	ret = adxl345_get_status(dev, &status1, NULL);
+//	ret = adxl345_get_status(dev, &status, NULL);
+	ret = adxl345_get_status(dev, &status);
 	if (ret < 0) {
 		return ret;
 	}
