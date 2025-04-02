@@ -11,6 +11,7 @@
 #include <zephyr/sys/util.h>
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/sensor.h>
+
 #include "adxl345.h"
 
 #include <zephyr/logging/log.h>
@@ -18,8 +19,7 @@
 LOG_MODULE_DECLARE(ADXL345, CONFIG_SENSOR_LOG_LEVEL);
 
 // TODO instead of "pad" use an array based on enum types for gpio numbers
-static int adxl345_set_int_pad_state(const struct device *dev,
-				     uint8_t pad,
+static int adxl345_set_int_pad_state(const struct device *dev, uint8_t pad,
 				     bool enable)
 {
 	const struct adxl345_dev_config *cfg = dev->config;
@@ -327,9 +327,6 @@ int adxl345_init_interrupt(const struct device *dev)
 	}
 
 //	drv_data->dev = dev; // TODO rm, needed?
-
-// TODO needed? adxl345_int1_notification_set(ctx, ADXL345_INT1_PULSED) != 0
-// TODO needed? adxl345_int1_notification_set(ctx, ADXL345_INT2_PULSED) != 0
 
 	return 0;
 }

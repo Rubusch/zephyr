@@ -14,6 +14,8 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/util.h>
 
+#include <zephyr/drivers/gpio.h>
+
 #ifdef CONFIG_ADXL345_STREAM
 #include <zephyr/rtio/rtio.h>
 #endif /* CONFIG_ADXL345_STREAM */
@@ -47,7 +49,8 @@
 #define ADXL345_REG_INT_SOURCE			0x30
 #define ADXL345_REG_DATA_FORMAT			0x31
 #define ADXL345_REG_DATAX0			0x32
-/* DATAX1, DATAY0, DATAY1, DATAZ0, DATAZ1 - each 8-bit, output data */
+#define ADXL345_REG_DATA_XYZ_REGS		0x32 // TODO use?
+/* DATAX0, DATAX1, DATAY0, DATAY1, DATAZ0, DATAZ1 - each 8-bit, output data */
 #define ADXL345_REG_FIFO_CTL			0x38
 #define ADXL345_REG_FIFO_STATUS			0x39
 
@@ -91,11 +94,11 @@
 
 /* POWER_CTL */
 #define ADXL345_POWER_CTL_WAKEUP_4HZ		BIT(0)
-#define ADXL345_POWER_CTL_WAKEUP_4HZ_MODE(x)	(((x) & 0x1) << 0)
+//#define ADXL345_POWER_CTL_WAKEUP_4HZ_MODE(x)	(((x) & 0x1) << 0) // TODO rm
 #define ADXL345_POWER_CTL_WAKEUP_2HZ		BIT(1)
-#define ADXL345_POWER_CTL_WAKEUP_2HZ_MODE(x)	(((x) & 0x1) << 1)
+//#define ADXL345_POWER_CTL_WAKEUP_2HZ_MODE(x)	(((x) & 0x1) << 1) // TODO rm
 #define ADXL345_POWER_CTL_SLEEP			BIT(2)
-#define ADXL345_POWER_CTL_SLEEP_MODE(x)		(((x) & 0x1) << 2)
+//#define ADXL345_POWER_CTL_SLEEP_MODE(x)		(((x) & 0x1) << 2)
 //#define ADXL345_POWER_CTL_MEASURE_MSK		GENMASK(3, 3)
 //#define ADXL345_POWER_CTL_MEASURE_MODE(x)    (((x) & 0x1) << 3)
 //#define ADXL345_POWER_CTL_STANDBY_MODE(x)    (((x) & 0x0) << 3)
@@ -141,7 +144,7 @@ enum adxl345_odr {
 	ADXL345_ODR_50HZ,
 	ADXL345_ODR_100HZ,
 	ADXL345_ODR_200HZ,
-	ADXL345_ODR_400HZ
+	ADXL345_ODR_400HZ,
 };
 
 /* FIFO trigger, note this is only used in FIFO triggered mode */
@@ -164,6 +167,20 @@ struct adxl345_fifo_config {
 	uint8_t fifo_samples; /* used for STREAM/RTIO */
 };
 
+struct adxl345_fifo_data {
+	uint8_t is_fifo: 1;
+	uint8_t is_full_res: 1;
+	uint8_t selected_range: 2;
+	uint8_t sample_set_size: 4;
+	uint8_t int_status;
+	uint16_t accel_odr: 4;
+	uint16_t fifo_byte_count: 12;
+	uint64_t timestamp;
+} __attribute__((__packed__));
+
+BUILD_ASSERT(sizeof(struct adxl345_fifo_data) % 4 == 0,
+		"struct adxl345_fifo_data should  be word aligned"); // TODO verify
+
 enum adxl345_op_mode {
 	ADXL345_OP_STANDBY,
 	ADXL345_OP_MEASURE,
@@ -171,14 +188,16 @@ enum adxl345_op_mode {
 
 struct adxl345_dev_data {
 //	unsigned int sample_number;
-//* // TODO replace this by sample
+//* // TODO replace this by sample? or replace sample by this?
 	int16_t bufx[ADXL345_MAX_FIFO_SIZE];
 	int16_t bufy[ADXL345_MAX_FIFO_SIZE];
 	int16_t bufz[ADXL345_MAX_FIFO_SIZE];
 /*/
 	struct adxl345_xyz_accel_data sample;
 // */
- 	struct adxl345_fifo_config fifo_config; // TODO rm
+
+// 	struct adxl345_fifo_config fifo_config; // TODO rm -> move to config
+
 //	uint8_t fifo_samples;
 //	uint8_t is_full_res;
 //	uint8_t selected_range;
@@ -211,20 +230,6 @@ struct adxl345_dev_data {
 	uint16_t fifo_total_bytes;
 #endif /* CONFIG_ADXL345_STREAM */
 };
-
-struct adxl345_fifo_data {
-	uint8_t is_fifo: 1;
-	uint8_t is_full_res: 1;
-	uint8_t selected_range: 2;
-	uint8_t sample_set_size: 4;
-	uint8_t int_status;
-	uint16_t accel_odr: 4;
-	uint16_t fifo_byte_count: 12;
-	uint64_t timestamp;
-} __attribute__((__packed__));
-
-BUILD_ASSERT(sizeof(struct adxl345_fifo_data) % 4 == 0,
-		"struct adxl345_fifo_data should  be word aligned"); // TODO verify
 
 //struct adxl345_sample {  // TODO rm, rename to adxl345_xyz_accel_data
 struct adxl345_xyz_accel_data { // TODO is this actually needed?
@@ -259,8 +264,8 @@ struct adxl345_dev_config {
 
 	enum adxl345_odr odr;
 //	bool op_mode; // TODO rm
-//	struct adxl345_fifo_config fifo_config; // TODO rm
-//	uint8_t bus_type; // TODO rm
+	struct adxl345_fifo_config fifo_config; // TODO rm
+	uint8_t bus_type; // TODO rm, verify - what is this good for?
 #ifdef CONFIG_ADXL345_TRIGGER
 	struct gpio_dt_spec gpio_int1;
 	struct gpio_dt_spec gpio_int2;
@@ -268,16 +273,18 @@ struct adxl345_dev_config {
 #endif
 };
 
+int adxl345_set_gpios_en(const struct device *dev, bool enable);
+
 void adxl345_submit_stream(const struct device *dev, struct rtio_iodev_sqe *iodev_sqe);
 void adxl345_stream_irq_handler(const struct device *dev);
 
-int adxl345_set_measure_en(const struct device *dev, bool en)
+int adxl345_set_measure_en(const struct device *dev, bool en);
 
 #ifdef CONFIG_ADXL345_TRIGGER
-int adxl345_get_fifo_status(const struct device *dev, uint8_t *fifo_entries);
+int adxl345_get_fifo_status(const struct device *dev, uint8_t *fifo_entries); // TODO										         // used?
+									      // for
+									      // what?
 int adxl345_get_status(const struct device *dev, uint8_t *status);
-
-int adxl345_set_gpios_en(const struct device *dev, bool enable);
 
 int adxl345_trigger_set(const struct device *dev,
 			const struct sensor_trigger *trig,
@@ -287,19 +294,17 @@ int adxl345_init_interrupt(const struct device *dev);
 
 #endif /* CONFIG_ADXL345_TRIGGER */
 
-int adxl345_reg_write_mask(const struct device *dev,
-			       uint8_t reg_addr,
-			       uint8_t mask,
-			       uint8_t data);
+int adxl345_reg_write_mask(const struct device *dev, uint8_t reg_addr,
+			   uint8_t mask, uint8_t data);
 
 int adxl345_reg_access(const struct device *dev, uint8_t cmd, uint8_t addr,
-				     uint8_t *data, size_t len);
+		       uint8_t *data, size_t len);
 
 int adxl345_reg_write(const struct device *dev, uint8_t addr, uint8_t *data,
-				    uint8_t len);
+		      uint8_t len);
 
 int adxl345_reg_read(const struct device *dev, uint8_t addr, uint8_t *data,
-				   uint8_t len);
+		     uint8_t len);
 
 int adxl345_reg_write_byte(const struct device *dev, uint8_t addr, uint8_t val);
 
@@ -315,7 +320,7 @@ void adxl345_accel_convert(struct sensor_value *val, int16_t sample);
 
 //#ifdef CONFIG_ADXL345_STREAM // TODO need to have this function to configure fifo bypass
 int adxl345_configure_fifo(const struct device *dev, enum adxl345_fifo_mode mode,
-		enum adxl345_fifo_trigger trigger, uint16_t fifo_samples);
+		enum adxl345_fifo_trigger trigger, uint8_t fifo_samples);
 
 #ifdef CONFIG_ADXL345_STREAM
 size_t adxl345_get_packet_size(const struct adxl345_dev_config *cfg);
