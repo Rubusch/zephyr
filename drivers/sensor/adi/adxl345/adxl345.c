@@ -253,7 +253,8 @@ int adxl345_configure_fifo(const struct device *dev,
 			   enum adxl345_fifo_trigger trigger,
 			   uint8_t fifo_samples)
 {
-	struct adxl345_dev_data *data = dev->data;
+	struct adxl345_dev_data *data = dev->data; // TODO rm, check if fifo_config can be migrated to cfg
+//	struct adxl345_dev_config *cfg = dev->config;
 	uint8_t fifo_config;
 	int ret;
 
@@ -273,6 +274,10 @@ int adxl345_configure_fifo(const struct device *dev,
 	data->fifo_config.fifo_trigger = trigger;
 	data->fifo_config.fifo_mode = mode;
 	data->fifo_config.fifo_samples = fifo_samples;
+
+//	cfg->fifo_config.fifo_trigger = trigger;
+//	cfg->fifo_config.fifo_mode = mode;
+//	cfg->fifo_config.fifo_samples = fifo_samples;
 
 	return 0;
 }
@@ -364,8 +369,8 @@ static int adxl345_attr_set(const struct device *dev,
 	}
 }
 
-int adxl345_get_accel_data(const struct device *dev, int idx)
-// , struct adxl345_xyz_accel_data *sample)
+int adxl345_get_accel_data(const struct device *dev,
+			   struct adxl345_xyz_accel_data *sample)
 {
 //	int16_t raw_x, raw_y, raw_z; // TODO rm
 	uint8_t axis_data[ADXL345_FIFO_SAMPLE_SIZE], status; //, fifo_status; // TODO
@@ -379,10 +384,8 @@ int adxl345_get_accel_data(const struct device *dev, int idx)
 		} while (!FIELD_GET(ADXL345_INT_MAP_DATA_RDY_MSK, status));
 	}
 
-// TODO fifo_status?
-
 	ret = adxl345_reg_read(dev, ADXL345_REG_DATAX0, axis_data,
-			       ADXL345_FIFO_SAMPLE_SIZE);
+			       ADXL345_FIFO_SAMPLE_SIZE);// TODO FIXME compute correct size
 	if (ret < 0) {
 		LOG_ERR("Samples read failed with rc=%d\n", ret);
 		return ret;
@@ -396,20 +399,18 @@ int adxl345_get_accel_data(const struct device *dev, int idx)
 	sample->x = raw_x;
 	sample->y = raw_y;
 	sample->z = raw_z;
-/ * /
+// */
+	/* needed for decoder */
+	sample->is_full_res = data->is_full_res;
+	sample->selected_range = data->selected_range;
+
+//	data->bufx[idx] = (axis_data[0] << 8) | (axis_data[1] & 0xf0);
+//	data->bufy[idx] = (axis_data[2] << 8) | (axis_data[3] & 0xf0);
+//	data->bufz[idx] = (axis_data[4] << 8) | (axis_data[5] & 0xf0);
+
 	sample->x = (axis_data[0] << 8) | (axis_data[1] & 0xf0);
 	sample->y = (axis_data[2] << 8) | (axis_data[3] & 0xf0);
 	sample->z = (axis_data[4] << 8) | (axis_data[5] & 0xf0);
-// */
-
-//	sample->selected_range = data->selected_range; // TODO rm
-//	sample->is_full_res = data->is_full_res; // TODO rm
-
-//for (uint8_t s = 0; s < samples_count; s++) {
-	
-	data->bufx[idx] = (axis_data[0] << 8) | (axis_data[1] & 0xf0);
-	data->bufy[idx] = (axis_data[2] << 8) | (axis_data[3] & 0xf0);
-	data->bufz[idx] = (axis_data[4] << 8) | (axis_data[5] & 0xf0);
 
 	return ret;
 }
@@ -424,20 +425,21 @@ void adxl345_accel_convert(struct sensor_value *val, int16_t sample)
 	val->val2 = ((sample * SENSOR_G) / 32) % 1000000;
 }
 
-// TODO how does this work together with trigger?
 static int adxl345_sample_fetch(const struct device *dev,
 				enum sensor_channel chan)
 {
 	struct adxl345_dev_data *data = dev->data;
-//	struct adxl345_xyz_accel_data sample;
+//	struct adxl345_dev_config *cfg = dev->config; // TODO rm
+//	struct adxl345_xyz_accel_data sample; // TODO rm
 	uint8_t regval, samples_count;
 	int rc;
 
-	data->sample_number = 0;
+	data->sample_number = 0; // TODO FIXME needed?
 	samples_count = 1;
 
 	/* FIFO BYPASSED is the only mode not using a FIFO buffer */
-	if (data->fifo_config.fifo_mode != ADXL345_FIFO_BYPASSED) {
+	if (data->fifo_config.fifo_mode != ADXL345_FIFO_BYPASSED) { // TODO rm
+//	if (cfg->fifo_config.fifo_mode != ADXL345_FIFO_BYPASSED) {
 		rc = adxl345_reg_read_byte(dev, ADXL345_REG_FIFO_STATUS, &regval);
 		if (rc < 0) {
 			LOG_ERR("Failed to read FIFO status rc = %d\n", rc);
@@ -449,16 +451,19 @@ static int adxl345_sample_fetch(const struct device *dev,
 
 //	__ASSERT_NO_MSG(samples_count <= ARRAY_SIZE(data->bufx)); // TODO rm, or needed? if sample_count defaults to 1?
 
+	data->sample_number = sample_count-1; // TODO new - is this correct? 
+
 	for (uint8_t s = 0; s < samples_count; s++) {
 //		rc = adxl345_get_accel_data(dev, &sample); // TODO rm
-		rc = adxl345_get_accel_data(dev, s);
+		rc = adxl345_get_accel_data(dev, &data->sample[s]);
 		if (rc < 0) {
 			LOG_ERR("Failed to fetch sample rc=%d\n", rc);
 			return rc;
 		}
-//		data->bufx[s] = sample.x;
-//		data->bufy[s] = sample.y;
-//		data->bufz[s] = sample.z;
+
+#ifdef CONFIG_ADXL345_STREAM
+		data->sample[idx].is_fifo = 0;
+#endif
 	}
 
 	return 0;
@@ -476,22 +481,31 @@ static int adxl345_channel_get(const struct device *dev,
 	}
 
 	idx = (data->fifo_config.fifo_mode == ADXL345_FIFO_BYPASSED) ? 0
-		: data->sample_number;
+		: data->sample_number; // FIXME sample_number??
 
 	switch (chan) {
-	case SENSOR_CHAN_ACCEL_X:
-		adxl345_accel_convert(val, data->bufx[idx]);
-		break;
-	case SENSOR_CHAN_ACCEL_Y:
-		adxl345_accel_convert(val, data->bufy[idx]);
-		break;
-	case SENSOR_CHAN_ACCEL_Z:
-		adxl345_accel_convert(val, data->bufz[idx]);
-		break;
+// TODO rm, or does this sensor have particular channel? or only bundle channels?
+// FIXME: the ADXL3345 cannot read out individual channels, can it?
+//	case SENSOR_CHAN_ACCEL_X:
+////		adxl345_accel_convert(val, data->bufx[idx]);
+//		adxl345_accel_convert(val, data->sample[idx].x);
+//		break;
+//	case SENSOR_CHAN_ACCEL_Y:
+////		adxl345_accel_convert(val, data->bufy[idx]);
+//		adxl345_accel_convert(val, data->sample[idx].y);
+//		break;
+//	case SENSOR_CHAN_ACCEL_Z:
+////		adxl345_accel_convert(val, data->bufz[idx]);
+//		adxl345_accel_convert(val, data->sample[idx].z);
+//		break;
 	case SENSOR_CHAN_ACCEL_XYZ:
-		adxl345_accel_convert(val++, data->bufx[idx]);
-		adxl345_accel_convert(val++, data->bufy[idx]);
-		adxl345_accel_convert(val,   data->bufz[idx]);
+//		adxl345_accel_convert(val++, data->bufx[idx]);
+//		adxl345_accel_convert(val++, data->bufy[idx]);
+//		adxl345_accel_convert(val,   data->bufz[idx]);
+		adxl345_accel_convert(val++, data->sample[idx].x);
+		adxl345_accel_convert(val++, data->sample[idx].y);
+		adxl345_accel_convert(val,   data->sample[idx].z);
+
 		break;
 	default:
 		return -ENOTSUP;
@@ -589,8 +603,8 @@ static int adxl345_setup_events(const struct device *dev)
 	int ret;
 	uint8_t regval = 0;
 
-	if (IS_ENABLED(CONFIG_ADXL345_TRIGGER)
-			&& adxl345_has_interrupt_lines(dev)) {
+#ifdef CONFIG_ADXL345_TRIGGER
+	if (adxl345_has_interrupt_lines(dev)) {
 		const struct adxl345_dev_config *cfg = dev->config;
 
 		ret = adxl345_set_measure_en(dev, false);
@@ -611,6 +625,7 @@ static int adxl345_setup_events(const struct device *dev)
 			regval |= FIELD_GET(ADXL345_INT_MAP_OVERRUN_MSK, 0xff);
 		}		
 	}
+#endif
 
 	/* enable events, or disable entirely */
 	ret = adxl345_reg_write_byte(dev, ADXL345_REG_INT_ENABLE, regval);
@@ -645,17 +660,17 @@ static int adxl345_init(const struct device *dev)
 	}
 
 	/* reset the sensor */
-	data->selected_range = ADXL345_RANGE_8G; // TODO set full range, until adjustable in DT
+	data->selected_range = ADXL345_RANGE_8G;
+	data->is_full_res = true;
+	data->sample_number = 0;
 	rc = adxl345_reg_write_byte(dev, ADXL345_REG_DATA_FORMAT,
-//				    data->selected_range |
-				    ADXL345_DATA_FORMAT_FULL_RES);
-// TODO check full_res and full_res field
+				    (data->is_full_res ? ADXL345_DATA_FORMAT_FULL_RES : 0x00) |
+				    adxl345_range_init[data->selected_range]);
 	if (rc < 0) {
 		LOG_ERR("Data format set failed\n");
 		return -EIO;
 	}
-	data->is_full_res = true; // TODO set full range, until adjustable in DT
-	data->sample_number = 0;
+	
 
 	rc = adxl345_set_odr(dev, cfg->odr);
 	if (rc) {
@@ -671,14 +686,15 @@ static int adxl345_init(const struct device *dev)
 	k_sleep(K_MSEC(100)); // TODO check if _really needed
 
 	fifo_mode = ADXL345_FIFO_BYPASSED;
-	if (IS_ENABLED(CONFIG_ADXL345_TRIGGER)) {
-		if (adxl345_init_interrupt(dev)) { 
-			/* no interrupt lines configured in DT */
-			fifo_mode = ADXL345_FIFO_BYPASSED;
-		} else {
-			fifo_mode = ADXL345_FIFO_STREAMED;
-		}
+#ifdef CONFIG_ADXL345_TRIGGER
+	if (adxl345_init_interrupt(dev)) { 
+		/* no interrupt lines configured in DT */
+		LOG_WARN("ADXL345 trigger was configurd, but no IRQ lines defined. Fallback to FIFO BYPASSED");
+		fifo_mode = ADXL345_FIFO_BYPASSED;
+	} else {
+		fifo_mode = ADXL345_FIFO_STREAMED;
 	}
+#endif
 
 	rc = adxl345_configure_fifo(dev, fifo_mode, ADXL345_INT_UNSET,
 				    ADXL345_FIFO_CTL_SAMPLES_MSK);
@@ -737,10 +753,12 @@ static int adxl345_init(const struct device *dev)
 		(RTIO_DEFINE(adxl345_rtio_ctx_##inst, 64, 64);))               \
 
 #define ADXL345_CONFIG(inst)								\
-		.odr = DT_INST_PROP_OR(inst, odr, ADXL345_RATE_25HZ),	\
-		.fifo_config.fifo_mode = ADXL345_FIFO_BYPASSED,		\
+		.odr = DT_INST_PROP_OR(inst, odr, ADXL345_RATE_25HZ),
+/*	\
+		.fifo_config.fifo_mode = ADXL345_FIFO_BYPASSED,	\
 		.fifo_config.fifo_trigger = ADXL345_INT_UNSET,		\
 		.fifo_config.fifo_samples = (ADXL345_MAX_FIFO_SIZE-1),
+*/
 
 #define ADXL345_CONFIG_SPI(inst)                                       \
 	{                                                              \

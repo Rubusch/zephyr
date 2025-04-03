@@ -221,7 +221,7 @@ static void adxl345_process_fifo_samples_cb(struct rtio *r, const struct rtio_sq
 	hdr->timestamp = data->timestamp;
 	hdr->int_status = data->status;
 	hdr->is_full_res = data->is_full_res;
-	hdr->selected_range = data->selected_range;
+	hdr->selected_range = data->selected_range; // using an enum here, needs the _init[], but why?
 	hdr->accel_odr = data->odr;
 	hdr->sample_set_size = sample_set_size;
 

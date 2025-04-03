@@ -50,8 +50,9 @@ static const uint32_t range_to_shift[] = {
 	[ADXL345_RANGE_16G] = 8,
 };
 
-static inline void adxl345_accel_convert_q31(q31_t *out, int16_t sample, int32_t range,
-					uint8_t is_full_res)
+static inline void adxl345_accel_convert_q31(q31_t *out, int16_t sample,
+					     enum adxl345_range range,
+					     bool is_full_res)
 {
 	if (is_full_res) {
 		switch (range) {
@@ -84,11 +85,10 @@ static inline void adxl345_accel_convert_q31(q31_t *out, int16_t sample, int32_t
 		*out = sample * qscale_factor_no_full_res[range];
 	}
 }
-
 #ifdef CONFIG_ADXL345_STREAM
 
 // TODO rm, is this used anywhere?
-//#define SENSOR_SCALING_FACTOR (SENSOR_G / (16 * 1000 / 100))
+//#define SENSOR_SCALING_FACTOR			(SENSOR_G / (16 * 1000 / 100))
 
 static const uint32_t accel_period_ns[] = {
 	[ADXL345_ODR_12HZ] = UINT32_C(1000000000) / 12,
@@ -112,18 +112,23 @@ static int adxl345_decode_stream(const uint8_t *buffer, struct sensor_chan_spec 
 		return 0;
 	}
 
+	if (chan_spec.chan_type != SENSOR_CHAN_ACCEL_XYZ) {
+		return -ENOTSUP;
+	}
+
 	struct sensor_three_axis_data *data = (struct sensor_three_axis_data *)data_out;
+	enum adxl345_range selected_range = enc_data->selected_range;
+	bool is_full_res = enc_data->is_full_res;
 
 	memset(data, 0, sizeof(struct sensor_three_axis_data));
 	data->header.base_timestamp_ns = enc_data->timestamp;
 	data->header.reading_count = 1;
-	data->shift = range_to_shift[enc_data->selected_range];
+	data->shift = range_to_shift[selected_range];
 
 	buffer += sizeof(struct adxl345_fifo_data);
 
 	uint8_t sample_set_size = enc_data->sample_set_size;
 	uint64_t period_ns = accel_period_ns[enc_data->accel_odr];
-//	uint8_t is_full_res = enc_data->is_full_res; // TODO rm,  no var needed
 
 	/* Calculate which sample is decoded. */
 	if ((uint8_t *)*fit >= buffer) {
@@ -141,29 +146,23 @@ static int adxl345_decode_stream(const uint8_t *buffer, struct sensor_chan_spec 
 			continue;
 		}
 
-//		switch (chan_spec.chan_type) {
+//		switch (chan_spec.chan_type) { // TODO rm
 //		case SENSOR_CHAN_ACCEL_XYZ:
-		if (chan_spec.chan_type != SENSOR_CHAN_ACCEL_XYZ) {
-			return -ENOTSUP;
-		}
 		
 		data->readings[count].timestamp_delta = sample_num * period_ns;
 		uint8_t buff_offset = 0;
 
 		adxl345_accel_convert_q31(&data->readings[count].x,
 					  *(int16_t *)buffer,
-					  enc_data->selected_range,
-					  enc_data->is_full_res);
+					  selected_range, is_full_res);
 		buff_offset = 2;
 		adxl345_accel_convert_q31(&data->readings[count].y,
 					  *(int16_t *)(buffer + buff_offset),
-					  enc_data->selected_range,
-					  enc_data->is_full_res);
+					  selected_range, is_full_res);
 		buff_offset += 2;
 		adxl345_accel_convert_q31(&data->readings[count].z,
 					  *(int16_t *)(buffer + buff_offset),
-					  enc_data->selected_range,
-					  enc_data->is_full_res);
+					  selected_range, is_full_res);
 //		break; // TODO rm
 //		default:
 //			return -ENOTSUP;
@@ -240,8 +239,14 @@ static int adxl345_decoder_get_frame_count(const uint8_t *buffer, struct sensor_
 }
 
 static int adxl345_decode_sample(const struct adxl345_xyz_accel_data *data,
-				 struct sensor_chan_spec chan_spec, uint32_t *fit,
-				 uint16_t max_count, void *data_out)
+//				 enum adxl345_range selected_range,
+//				 bool is_full_res,
+				 struct sensor_chan_spec chan_spec,
+				 uint32_t *fit,
+				 uint16_t max_count,
+				 void *data_out)
+// TODO add selected_range - verify, or keep... ??
+// TODO add is_full_res - verify ??? XXX
 {
 	struct sensor_three_axis_data *out = (struct sensor_three_axis_data *)data_out;
 

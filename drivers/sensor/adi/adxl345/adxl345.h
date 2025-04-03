@@ -7,6 +7,8 @@
 #ifndef ZEPHYR_DRIVERS_SENSOR_ADX345_ADX345_H_
 #define ZEPHYR_DRIVERS_SENSOR_ADX345_ADX345_H_
 
+//#define CONFIG_ADXL345_TRIGGER // TODO rm
+
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/types.h>
 #include <zephyr/device.h>
@@ -59,10 +61,24 @@
 
 #define ADXL345_DATA_FORMAT_FULL_RES		0x08
 
-#define ADXL345_RANGE_2G			0x0
-#define ADXL345_RANGE_4G			0x1
-#define ADXL345_RANGE_8G			0x2
-#define ADXL345_RANGE_16G			0x3
+#define ADXL345_DATA_FORMAT_RANGE_2G		0x0
+#define ADXL345_DATA_FORMAT_RANGE_4G		0x1
+#define ADXL345_DATA_FORMAT_RANGE_8G		0x2
+#define ADXL345_DATA_FORMAT_RANGE_16G		0x3
+
+enum adxl345_range {
+	ADXL345_RANGE_2G,
+	ADXL345_RANGE_4G,
+	ADXL345_RANGE_8G,
+	ADXL345_RANGE_16G,
+};
+
+static const uint8_t adxl345_range_init[] = {
+	[ADXL345_RANGE_2G] = ADXL345_DATA_FORMAT_RANGE_2G,
+	[ADXL345_RANGE_4G] = ADXL345_DATA_FORMAT_RANGE_4G,
+	[ADXL345_RANGE_8G] = ADXL345_DATA_FORMAT_RANGE_8G,
+	[ADXL345_RANGE_16G] = ADXL345_DATA_FORMAT_RANGE_16G,
+};
 
 #define ADXL345_RATE_25HZ			0x8
 
@@ -114,6 +130,13 @@
 #define ADXL345_FIFO_CTL_MODE_STREAMED		0x80
 #define ADXL345_FIFO_CTL_MODE_TRIGGERED		0xc0
 
+enum adxl345_fifo_mode {
+	ADXL345_FIFO_BYPASSED,
+	ADXL345_FIFO_OLD_SAVED,
+	ADXL345_FIFO_STREAMED,
+	ADXL345_FIFO_TRIGGERED,
+};
+
 #define ADXL345_FIFO_SAMPLE_SIZE		6
 //#define ADXL345_FIFO_SAMPLE_MASK 0x3F // TODO rm
 //#define ADXL345_FIFO_SAMPLE_NUM  0x1F // TODO rm
@@ -132,11 +155,15 @@
 #define ADXL345_FIFO_CTL_TRIGGER_INT2		BIT(5)
 #define ADXL345_FIFO_CTL_TRIGGER_UNSET		0x0
 
+/* FIFO trigger, note this is only used in FIFO triggered mode */
+enum adxl345_fifo_trigger {
+	ADXL345_INT1,
+	ADXL345_INT2,
+	ADXL345_INT_UNSET,
+};
+
 #define ADXL345_ODR_MSK				GENMASK(3, 0)
 #define ADXL345_ODR_MODE(x)			((x) & 0xF)
-
-#define ADXL345_BUS_I2C				0
-#define ADXL345_BUS_SPI				1
 
 enum adxl345_odr {
 	ADXL345_ODR_12HZ = 0x7,
@@ -147,19 +174,8 @@ enum adxl345_odr {
 	ADXL345_ODR_400HZ,
 };
 
-/* FIFO trigger, note this is only used in FIFO triggered mode */
-enum adxl345_fifo_trigger {
-	ADXL345_INT1,
-	ADXL345_INT2,
-	ADXL345_INT_UNSET,
-};
-
-enum adxl345_fifo_mode {
-	ADXL345_FIFO_BYPASSED,
-	ADXL345_FIFO_OLD_SAVED,
-	ADXL345_FIFO_STREAMED,
-	ADXL345_FIFO_TRIGGERED,
-};
+#define ADXL345_BUS_I2C				0
+#define ADXL345_BUS_SPI				1
 
 struct adxl345_fifo_config {
 	enum adxl345_fifo_mode fifo_mode; /* used for distinguishing to BYPASS */
@@ -169,12 +185,13 @@ struct adxl345_fifo_config {
 
 struct adxl345_fifo_data {
 	uint8_t is_fifo: 1;
-	uint8_t is_full_res: 1;
-	uint8_t selected_range: 2;
+	uint8_t is_full_res: 1; /* used for conversion in decoder, set by STREAM */
+	enum adxl345_range selected_range: 2; /* determines shift and conversion in decoder, set by STREAM */
 	uint8_t sample_set_size: 4;
 	uint8_t int_status;
-	uint16_t accel_odr: 4;
-	uint16_t fifo_byte_count: 12;
+	uint16_t accel_odr: 4; // TODO 4bit for odr, then uint16_t bitpacked?!
+	uint16_t fifo_byte_count: 12; // TODO 12 bit for fifo byte count? -> max 32 entries, each 2 bytes,
+				      // 3 axis, makes 192 bytes < 256 bytes -> should fit in 2^8
 	uint64_t timestamp;
 } __attribute__((__packed__));
 
@@ -186,21 +203,43 @@ enum adxl345_op_mode {
 	ADXL345_OP_MEASURE,
 };
 
+//struct adxl345_sample {  // TODO rm, rename to adxl345_xyz_accel_data
+struct adxl345_xyz_accel_data { // TODO is this actually needed?
+#ifdef CONFIG_ADXL345_STREAM // TODO move to end of struct
+	uint8_t is_fifo: 1;
+	uint8_t res: 7;
+#endif /* CONFIG_ADXL345_STREAM */
+	enum adxl345_range selected_range; /* used in decoder_decode, passed w/ sample */
+	bool is_full_res; /* used in decoder, passed w/ sample to decode */
+	int16_t x;
+	int16_t y;
+	int16_t z;
+} __attribute__((__packed__)); // TODO verify, probably needs packed
+
+union adxl345_bus {
+#if DT_ANY_INST_ON_BUS_STATUS_OKAY(i2c)
+	struct i2c_dt_spec i2c;
+#endif
+#if DT_ANY_INST_ON_BUS_STATUS_OKAY(spi)
+	struct spi_dt_spec spi;
+#endif
+};
+
 struct adxl345_dev_data {
-//	unsigned int sample_number;
-//* // TODO replace this by sample? or replace sample by this?
+/* // TODO replace this by sample? or replace sample by this?
 	int16_t bufx[ADXL345_MAX_FIFO_SIZE];
 	int16_t bufy[ADXL345_MAX_FIFO_SIZE];
 	int16_t bufz[ADXL345_MAX_FIFO_SIZE];
 /*/
-	struct adxl345_xyz_accel_data sample;
+	struct adxl345_xyz_accel_data sample[ADXL345_MAX_FIFO_SIZE];
+	int sample_number;
 // */
 
-// 	struct adxl345_fifo_config fifo_config; // TODO rm -> move to config
+ 	struct adxl345_fifo_config fifo_config; // TODO rm -> move to config
 
 //	uint8_t fifo_samples;
-//	uint8_t is_full_res;
-//	uint8_t selected_range;
+	bool is_full_res; /* STREAM: to init sample for decoder */
+	enum adxl345_range selected_range; /* STREAM: init sample for decoder */
 	enum adxl345_odr odr;
 #ifdef CONFIG_ADXL345_TRIGGER
 	struct gpio_callback int1_cb;
@@ -231,28 +270,6 @@ struct adxl345_dev_data {
 #endif /* CONFIG_ADXL345_STREAM */
 };
 
-//struct adxl345_sample {  // TODO rm, rename to adxl345_xyz_accel_data
-struct adxl345_xyz_accel_data { // TODO is this actually needed?
-#ifdef CONFIG_ADXL345_STREAM // TODO move to end of struct
-	uint8_t is_fifo: 1;
-	uint8_t res: 7;
-#endif /* CONFIG_ADXL345_STREAM */
-	uint8_t selected_range;
-	bool is_full_res;
-	int16_t x;
-	int16_t y;
-	int16_t z;
-} __attribute__((__packed__)); // TODO verify, probably needs packed
-
-union adxl345_bus {
-#if DT_ANY_INST_ON_BUS_STATUS_OKAY(i2c)
-	struct i2c_dt_spec i2c;
-#endif
-#if DT_ANY_INST_ON_BUS_STATUS_OKAY(spi)
-	struct spi_dt_spec spi;
-#endif
-};
-
 typedef bool (*adxl345_bus_is_ready_fn)(const union adxl345_bus *bus);
 typedef int (*adxl345_reg_access_fn)(const struct device *dev, uint8_t cmd,
 				     uint8_t reg_addr, uint8_t *data, size_t length);
@@ -264,13 +281,13 @@ struct adxl345_dev_config {
 
 	enum adxl345_odr odr;
 //	bool op_mode; // TODO rm
-	struct adxl345_fifo_config fifo_config; // TODO rm
+//	struct adxl345_fifo_config fifo_config; // TODO rm
 	uint8_t bus_type; // TODO rm, verify - what is this good for?
-#ifdef CONFIG_ADXL345_TRIGGER
+//#ifdef CONFIG_ADXL345_TRIGGER
 	struct gpio_dt_spec gpio_int1;
 	struct gpio_dt_spec gpio_int2;
 	int8_t drdy_pad;
-#endif
+//#endif
 };
 
 int adxl345_set_gpios_en(const struct device *dev, bool enable);
