@@ -159,6 +159,7 @@ static inline bool adxl345_bus_is_ready(const struct device *dev)
 }
 
 // TODO needed globally? rm
+#ifdef CONFIG_ADXL345_TRIGGER
 static bool adxl345_has_interrupt_lines(const struct device *dev)
 {
 	if (IS_ENABLED(CONFIG_ADXL345_TRIGGER)) {
@@ -171,6 +172,7 @@ static bool adxl345_has_interrupt_lines(const struct device *dev)
 
 	return false;
 }
+#endif /* CONFIG_ADXL345_TRIGGER */
 
 int adxl345_set_measure_en(const struct device *dev, bool enable)
 {
@@ -435,6 +437,7 @@ static int adxl345_sample_fetch(const struct device *dev,
 	int rc;
 
 	data->sample_number = 0; // TODO FIXME needed?
+// TODO use data->sample_count directly
 	samples_count = 1;
 
 	/* FIFO BYPASSED is the only mode not using a FIFO buffer */
@@ -451,8 +454,6 @@ static int adxl345_sample_fetch(const struct device *dev,
 
 //	__ASSERT_NO_MSG(samples_count <= ARRAY_SIZE(data->bufx)); // TODO rm, or needed? if sample_count defaults to 1?
 
-	data->sample_number = sample_count-1; // TODO new - is this correct? 
-
 	for (uint8_t s = 0; s < samples_count; s++) {
 //		rc = adxl345_get_accel_data(dev, &sample); // TODO rm
 		rc = adxl345_get_accel_data(dev, &data->sample[s]);
@@ -461,6 +462,7 @@ static int adxl345_sample_fetch(const struct device *dev,
 			return rc;
 		}
 
+	data->sample_number = samples_count-1; // TODO new - is this correct?
 #ifdef CONFIG_ADXL345_STREAM
 		data->sample[idx].is_fifo = 0;
 #endif
@@ -476,7 +478,8 @@ static int adxl345_channel_get(const struct device *dev,
 	struct adxl345_dev_data *data = dev->data;
 	int idx;
 
-	if (data->sample_number >= ARRAY_SIZE(data->bufx)) {
+//	if (data->sample_number >= ARRAY_SIZE(data->bufx)) {
+	if (data->sample_number >= ARRAY_SIZE(data->sample)) {
 		data->sample_number = 0;
 	}
 
@@ -486,18 +489,24 @@ static int adxl345_channel_get(const struct device *dev,
 	switch (chan) {
 // TODO rm, or does this sensor have particular channel? or only bundle channels?
 // FIXME: the ADXL3345 cannot read out individual channels, can it?
-//	case SENSOR_CHAN_ACCEL_X:
-////		adxl345_accel_convert(val, data->bufx[idx]);
-//		adxl345_accel_convert(val, data->sample[idx].x);
-//		break;
-//	case SENSOR_CHAN_ACCEL_Y:
-////		adxl345_accel_convert(val, data->bufy[idx]);
-//		adxl345_accel_convert(val, data->sample[idx].y);
-//		break;
-//	case SENSOR_CHAN_ACCEL_Z:
-////		adxl345_accel_convert(val, data->bufz[idx]);
-//		adxl345_accel_convert(val, data->sample[idx].z);
-//		break;
+	case SENSOR_CHAN_ACCEL_X:
+//		adxl345_accel_convert(val, data->bufx[idx]);
+		adxl345_accel_convert(val, data->sample[idx].x);
+		adxl345_accel_convert(val, data->sample[idx].y);
+		adxl345_accel_convert(val, data->sample[idx].z);
+		break;
+	case SENSOR_CHAN_ACCEL_Y:
+//		adxl345_accel_convert(val, data->bufy[idx]);
+		adxl345_accel_convert(val, data->sample[idx].x);
+		adxl345_accel_convert(val, data->sample[idx].y);
+		adxl345_accel_convert(val, data->sample[idx].z);
+		break;
+	case SENSOR_CHAN_ACCEL_Z:
+//		adxl345_accel_convert(val, data->bufz[idx]);
+		adxl345_accel_convert(val, data->sample[idx].x);
+		adxl345_accel_convert(val, data->sample[idx].y);
+		adxl345_accel_convert(val, data->sample[idx].z);
+		break;
 	case SENSOR_CHAN_ACCEL_XYZ:
 //		adxl345_accel_convert(val++, data->bufx[idx]);
 //		adxl345_accel_convert(val++, data->bufy[idx]);
