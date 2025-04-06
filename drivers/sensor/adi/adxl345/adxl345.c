@@ -15,11 +15,6 @@
 
 #include "adxl345.h"
 
-static const uint8_t adxl345_op_mode_init[] = {
-	[ADXL345_OP_STANDBY] = ADXL345_POWER_CTL_STANDBY_MODE,
-	[ADXL345_OP_MEASURE] = ADXL345_POWER_CTL_MEASURE_MODE,
-};
-
 static const uint8_t adxl345_fifo_ctl_trigger_init[] = {
 	[ADXL345_FIFO_CTL_TRIGGER_INT1] = ADXL345_INT1,
 	[ADXL345_FIFO_CTL_TRIGGER_INT2] = ADXL345_INT2,
@@ -67,12 +62,10 @@ int adxl345_reg_access_spi(const struct device *dev, uint8_t cmd, uint8_t reg_ad
 	uint8_t access = reg_addr | cmd | (length == 1 ? 0 : ADXL345_MULTIBYTE_FLAG);
 	const struct spi_buf buf[2] = {{.buf = &access, .len = 1}, {.buf = data, .len = length}, };
 	const struct spi_buf_set rx = {.buffers = buf, .count = ARRAY_SIZE(buf), };
-//	struct spi_buf_set tx = {.buffers = buf, .count = 2, };
 	struct spi_buf_set tx = {.buffers = buf, .count = (cmd == ADXL345_READ_CMD) ? 1 : 2, };
 	int ret;
 
 	if (cmd == ADXL345_READ_CMD) {
-//		tx.count = 1;
 		ret = spi_transceive_dt(&cfg->bus.spi, &tx, &rx);
 		return ret;
 	} else {
@@ -112,30 +105,8 @@ int adxl345_reg_read_byte(const struct device *dev, uint8_t addr, uint8_t *buf)
 	return adxl345_reg_read(dev, addr, buf, 1);
 }
 
-/*
-int adxl345_reg_write_mask(const struct device *dev,
-			       uint8_t reg_addr,
-			       uint8_t mask,
-			       uint8_t data)
-{
-	int ret;
-	uint8_t tmp;
-
-	ret = adxl345_reg_read_byte(dev, reg_addr, &tmp);
-	if (ret) {
-		return ret;
-	}
-
-	tmp &= ~mask;
-	tmp |= data;
-
-	return adxl345_reg_write_byte(dev, reg_addr, tmp);
-}
-/*/
-int adxl345_reg_update_bits(const struct device *dev,
-			    uint8_t reg,
-			    uint8_t mask,
-			    uint8_t val)
+int adxl345_reg_update_bits(const struct device *dev, uint8_t reg,
+			    uint8_t mask, uint8_t val)
 {
 	uint8_t regval, tmp;
 	int ret;
@@ -158,8 +129,12 @@ static inline bool adxl345_bus_is_ready(const struct device *dev)
 	return cfg->bus_is_ready(&cfg->bus);
 }
 
-// TODO needed globally? rm
 #ifdef CONFIG_ADXL345_TRIGGER
+static const uint8_t adxl345_op_mode_init[] = {
+	[ADXL345_OP_STANDBY] = ADXL345_POWER_CTL_STANDBY_MODE,
+	[ADXL345_OP_MEASURE] = ADXL345_POWER_CTL_MEASURE_MODE,
+};
+
 static bool adxl345_has_interrupt_lines(const struct device *dev)
 {
 	if (IS_ENABLED(CONFIG_ADXL345_TRIGGER)) {
@@ -176,8 +151,9 @@ static bool adxl345_has_interrupt_lines(const struct device *dev)
 
 int adxl345_set_measure_en(const struct device *dev, bool enable)
 {
+	int ret = 0;
+#ifdef CONFIG_ADXL345_TRIGGER
 	uint8_t val;
-	int ret;
 	
 	/* set sensor to standby */
 	val = adxl345_op_mode_init[enable ? ADXL345_OP_MEASURE : ADXL345_OP_STANDBY];
@@ -194,6 +170,7 @@ int adxl345_set_measure_en(const struct device *dev, bool enable)
 			return ret;
 		}
 	}
+#endif
 	
 	return ret;
 }
@@ -277,6 +254,7 @@ int adxl345_configure_fifo(const struct device *dev,
 	data->fifo_config.fifo_mode = mode;
 	data->fifo_config.fifo_samples = fifo_samples;
 
+// TODO rm
 //	cfg->fifo_config.fifo_trigger = trigger;
 //	cfg->fifo_config.fifo_mode = mode;
 //	cfg->fifo_config.fifo_samples = fifo_samples;
@@ -374,20 +352,18 @@ static int adxl345_attr_set(const struct device *dev,
 int adxl345_get_accel_data(const struct device *dev,
 			   struct adxl345_xyz_accel_data *sample)
 {
-//	int16_t raw_x, raw_y, raw_z; // TODO rm
 	uint8_t axis_data[ADXL345_FIFO_SAMPLE_SIZE], status; //, fifo_status; // TODO
-	struct adxl345_dev_data *data = dev->data;
+//	struct adxl345_dev_data *data = dev->data;
 	int ret;
 
-	if (!IS_ENABLED(CONFIG_ADXL345_TRIGGER)) {
+	if (!IS_ENABLED(CONFIG_ADXL345_TRIGGER)) { // TODO break out earlier
 		do {
-// TODO polling for status???
 			adxl345_get_status(dev, &status);
 		} while (!FIELD_GET(ADXL345_INT_MAP_DATA_RDY_MSK, status));
 	}
 
-	ret = adxl345_reg_read(dev, ADXL345_REG_DATAX0, axis_data,
-			       ADXL345_FIFO_SAMPLE_SIZE);// TODO FIXME compute correct size
+	ret = adxl345_reg_read(dev, ADXL345_REG_DATAX0, axis_data, 6);
+	//		       ADXL345_FIFO_SAMPLE_SIZE);// TODO FIXME compute correct size
 	if (ret < 0) {
 		LOG_ERR("Samples read failed with rc=%d\n", ret);
 		return ret;
@@ -402,29 +378,34 @@ int adxl345_get_accel_data(const struct device *dev,
 	sample->y = raw_y;
 	sample->z = raw_z;
 // */
-	/* needed for decoder */
-	sample->is_full_res = data->is_full_res;
+	sample->x = axis_data[0] | axis_data[1] << 8;
+	sample->y = axis_data[2] | axis_data[3] << 8;
+	sample->z = axis_data[4] | axis_data[5] << 8;
+#ifdef CONFIG_ADXL345_TRIGGER
+	struct adxl345_dev_data *data = dev->data;
+	sample->is_full_res = data->is_full_res; /* needed for decoder */
 	sample->selected_range = data->selected_range;
-
-//	data->bufx[idx] = (axis_data[0] << 8) | (axis_data[1] & 0xf0);
-//	data->bufy[idx] = (axis_data[2] << 8) | (axis_data[3] & 0xf0);
-//	data->bufz[idx] = (axis_data[4] << 8) | (axis_data[5] & 0xf0);
-
-	sample->x = (axis_data[0] << 8) | (axis_data[1] & 0xf0);
-	sample->y = (axis_data[2] << 8) | (axis_data[3] & 0xf0);
-	sample->z = (axis_data[4] << 8) | (axis_data[5] & 0xf0);
+#endif
 
 	return ret;
 }
 
-void adxl345_accel_convert(struct sensor_value *val, int16_t sample)
+/**
+ * adxl345_accel_convert - The fallback conversion of raw measurements.
+ * @out: Converted value for output, containing the initialized fractional.
+ * @sample: Input raw measurement.
+ * When working without decoder, neither TRIGGER, nor STREAM is enabled,
+ * this small converter is used. It assumes full scale resolution and 8g.
+ */
+void adxl345_accel_convert(struct sensor_value *out, int16_t sample)
 {
-	if (sample & BIT(9)) {
-		sample |= ADXL345_COMPLEMENT;
+	/* full resolution enabled w/ 8g */
+	if (sample & BIT(11)) {
+		sample |= ADXL345_COMPLEMENT_MASK(12);
 	}
 
-	val->val1 = ((sample * SENSOR_G) / 32) / 1000000;
-	val->val2 = ((sample * SENSOR_G) / 32) % 1000000;
+	out->val1 = ((sample * SENSOR_G) / 32) / 1000000;
+	out->val2 = ((sample * SENSOR_G) / 32) % 1000000;
 }
 
 static int adxl345_sample_fetch(const struct device *dev,
@@ -433,40 +414,39 @@ static int adxl345_sample_fetch(const struct device *dev,
 	struct adxl345_dev_data *data = dev->data;
 //	struct adxl345_dev_config *cfg = dev->config; // TODO rm
 //	struct adxl345_xyz_accel_data sample; // TODO rm
-	uint8_t regval, samples_count;
+	uint8_t regval, count;
 	int rc;
 
-	data->sample_number = 0; // TODO FIXME needed?
-// TODO use data->sample_count directly
-	samples_count = 1;
+	count = 1;
 
 	/* FIFO BYPASSED is the only mode not using a FIFO buffer */
-	if (data->fifo_config.fifo_mode != ADXL345_FIFO_BYPASSED) { // TODO rm
-//	if (cfg->fifo_config.fifo_mode != ADXL345_FIFO_BYPASSED) {
+	if (data->fifo_config.fifo_mode != ADXL345_FIFO_BYPASSED) {
 		rc = adxl345_reg_read_byte(dev, ADXL345_REG_FIFO_STATUS, &regval);
 		if (rc < 0) {
 			LOG_ERR("Failed to read FIFO status rc = %d\n", rc);
 			return rc;
 		}
 
-		samples_count = FIELD_GET(ADLX345_FIFO_STATUS_ENTRIES_MSK, regval);
+		count = FIELD_GET(ADLX345_FIFO_STATUS_ENTRIES_MSK, regval);
 	}
 
-//	__ASSERT_NO_MSG(samples_count <= ARRAY_SIZE(data->bufx)); // TODO rm, or needed? if sample_count defaults to 1?
+	__ASSERT_NO_MSG(count <= ARRAY_SIZE(data->sample));
 
-	for (uint8_t s = 0; s < samples_count; s++) {
-//		rc = adxl345_get_accel_data(dev, &sample); // TODO rm
+	for (uint8_t s = 0; s < count; s++) {
 		rc = adxl345_get_accel_data(dev, &data->sample[s]);
 		if (rc < 0) {
 			LOG_ERR("Failed to fetch sample rc=%d\n", rc);
 			return rc;
 		}
 
-	data->sample_number = samples_count-1; // TODO new - is this correct?
 #ifdef CONFIG_ADXL345_STREAM
-		data->sample[idx].is_fifo = 0;
+		data->sample[s].is_fifo = 0;
 #endif
 	}
+
+	/* new sample available, reset book-keeping */
+	data->sample_idx = 0;
+	data->sample_number = count;
 
 	return 0;
 }
@@ -478,39 +458,20 @@ static int adxl345_channel_get(const struct device *dev,
 	struct adxl345_dev_data *data = dev->data;
 	int idx;
 
-//	if (data->sample_number >= ARRAY_SIZE(data->bufx)) {
-	if (data->sample_number >= ARRAY_SIZE(data->sample)) {
-		data->sample_number = 0;
-	}
-
-	idx = (data->fifo_config.fifo_mode == ADXL345_FIFO_BYPASSED) ? 0
-		: data->sample_number; // FIXME sample_number??
+	data->sample_idx = data->sample_idx % data->sample_number;
+	idx = data->sample_idx;
 
 	switch (chan) {
-// TODO rm, or does this sensor have particular channel? or only bundle channels?
-// FIXME: the ADXL3345 cannot read out individual channels, can it?
 	case SENSOR_CHAN_ACCEL_X:
-//		adxl345_accel_convert(val, data->bufx[idx]);
 		adxl345_accel_convert(val, data->sample[idx].x);
-		adxl345_accel_convert(val, data->sample[idx].y);
-		adxl345_accel_convert(val, data->sample[idx].z);
 		break;
 	case SENSOR_CHAN_ACCEL_Y:
-//		adxl345_accel_convert(val, data->bufy[idx]);
-		adxl345_accel_convert(val, data->sample[idx].x);
 		adxl345_accel_convert(val, data->sample[idx].y);
-		adxl345_accel_convert(val, data->sample[idx].z);
 		break;
 	case SENSOR_CHAN_ACCEL_Z:
-//		adxl345_accel_convert(val, data->bufz[idx]);
-		adxl345_accel_convert(val, data->sample[idx].x);
-		adxl345_accel_convert(val, data->sample[idx].y);
 		adxl345_accel_convert(val, data->sample[idx].z);
 		break;
 	case SENSOR_CHAN_ACCEL_XYZ:
-//		adxl345_accel_convert(val++, data->bufx[idx]);
-//		adxl345_accel_convert(val++, data->bufy[idx]);
-//		adxl345_accel_convert(val,   data->bufz[idx]);
 		adxl345_accel_convert(val++, data->sample[idx].x);
 		adxl345_accel_convert(val++, data->sample[idx].y);
 		adxl345_accel_convert(val,   data->sample[idx].z);
@@ -520,7 +481,9 @@ static int adxl345_channel_get(const struct device *dev,
 		return -ENOTSUP;
 	}
 
-	data->sample_number++;
+// TODO rm or use for fifo read outs
+//	data->sample_idx++;
+
 	return 0;
 }
 
@@ -672,24 +635,27 @@ static int adxl345_init(const struct device *dev)
 	data->selected_range = ADXL345_RANGE_8G;
 	data->is_full_res = true;
 	data->sample_number = 0;
-	rc = adxl345_reg_write_byte(dev, ADXL345_REG_DATA_FORMAT,
+	data->sample_idx = 0;
+
+	/*
+	 * Reset the following sensor fields (in case of warm starts)
+	 * - turn off measurements as MSB values, use left justified vals
+	 * - configure full resolution accordingly
+	 * - turn off interrupt inversion
+	 * - turn off 3-wire SPI
+	 * - turn off self test mode
+	 */
+	rc = adxl345_reg_write_byte(dev, ADXL345_REG_DATA_FORMAT, 0x00 |
 				    (data->is_full_res ? ADXL345_DATA_FORMAT_FULL_RES : 0x00) |
 				    adxl345_range_init[data->selected_range]);
 	if (rc < 0) {
 		LOG_ERR("Data format set failed\n");
 		return -EIO;
 	}
-	
 
 	rc = adxl345_set_odr(dev, cfg->odr);
 	if (rc) {
 		return rc;
-	}
-
-	rc = adxl345_reg_write_byte(dev, ADXL345_REG_RATE, ADXL345_RATE_25HZ);
-	if (rc < 0) {
-		LOG_ERR("Rate setting failed\n");
-		return -EIO;
 	}
 
 	k_sleep(K_MSEC(100)); // TODO check if _really needed
@@ -704,7 +670,6 @@ static int adxl345_init(const struct device *dev)
 		fifo_mode = ADXL345_FIFO_STREAMED;
 	}
 #endif
-
 	rc = adxl345_configure_fifo(dev, fifo_mode, ADXL345_INT_UNSET,
 				    ADXL345_FIFO_CTL_SAMPLES_MSK);
 	if (rc) {

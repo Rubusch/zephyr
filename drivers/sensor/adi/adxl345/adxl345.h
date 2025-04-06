@@ -40,7 +40,7 @@
 #define ADXL345_REG_READ(x)			((x & 0xFF) | ADXL345_READ_CMD)
 
 #define ADXL345_COMPLEMENT_MASK(x)		GENMASK(15, (x))
-#define ADXL345_COMPLEMENT			0xfc00
+#define ADXL345_COMPLEMENT			GENMASK(15, 9) /* 0xfc00 */
 
 /* Registers */
 #define ADXL345_REG_DEVICE_ID			0x00
@@ -59,12 +59,16 @@
 
 #define ADXL345_PART_ID				0xe5
 
-#define ADXL345_DATA_FORMAT_FULL_RES		0x08
+#define ADXL345_DATA_FORMAT_RIGHT_JUSTIFY	BIT(2) /* 1: data is left justified on MSB */
+#define ADXL345_DATA_FORMAT_FULL_RES		BIT(3)
+#define ADXL345_DATA_FORMAT_INT_INVERT		BIT(5) /* 1: set interrupts to active low */
+#define ADXL345_DATA_FORMAT_3WIRE_SPI		BIT(6) /* 1: set to 3-wire SPI */
+#define ADXL345_DATA_FORMAT_SELF_TEST		BIT(7) /* 1: enable self test */
 
-#define ADXL345_DATA_FORMAT_RANGE_2G		0x0
-#define ADXL345_DATA_FORMAT_RANGE_4G		0x1
-#define ADXL345_DATA_FORMAT_RANGE_8G		0x2
-#define ADXL345_DATA_FORMAT_RANGE_16G		0x3
+#define ADXL345_DATA_FORMAT_RANGE_2G		0x00
+#define ADXL345_DATA_FORMAT_RANGE_4G		0x01
+#define ADXL345_DATA_FORMAT_RANGE_8G		0x02
+#define ADXL345_DATA_FORMAT_RANGE_16G		0x03
 
 enum adxl345_range {
 	ADXL345_RANGE_2G,
@@ -233,6 +237,7 @@ struct adxl345_dev_data {
 /*/
 	struct adxl345_xyz_accel_data sample[ADXL345_MAX_FIFO_SIZE];
 	int sample_number;
+	int sample_idx;
 // */
 
  	struct adxl345_fifo_config fifo_config; // TODO rm -> move to config
@@ -332,7 +337,7 @@ int adxl345_reg_read_byte(const struct device *dev, uint8_t addr, uint8_t *buf);
 int adxl345_get_accel_data(const struct device *dev, struct adxl345_xyz_accel_data *sample);
 void adxl345_submit(const struct device *dev, struct rtio_iodev_sqe *iodev_sqe);
 int adxl345_get_decoder(const struct device *dev, const struct sensor_decoder_api **decoder);
-void adxl345_accel_convert(struct sensor_value *val, int16_t sample);
+void adxl345_accel_convert(struct sensor_value *val, int16_t sample); // TODO rm
 #endif /* CONFIG_SENSOR_ASYNC_API */
 
 //#ifdef CONFIG_ADXL345_STREAM // TODO need to have this function to configure fifo bypass
