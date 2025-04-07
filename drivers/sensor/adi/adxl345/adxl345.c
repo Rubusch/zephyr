@@ -357,7 +357,7 @@ int adxl345_get_accel_data(const struct device *dev,
 	int ret;
 
 	if (!IS_ENABLED(CONFIG_ADXL345_TRIGGER)) { // TODO break out earlier
-		do {
+		do { /* polling read */
 			adxl345_get_status(dev, &status);
 		} while (!FIELD_GET(ADXL345_INT_MAP_DATA_RDY_MSK, status));
 	}
