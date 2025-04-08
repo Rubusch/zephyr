@@ -207,7 +207,6 @@ enum adxl345_op_mode {
 	ADXL345_OP_MEASURE,
 };
 
-//struct adxl345_sample {  // TODO rm, rename to adxl345_xyz_accel_data
 struct adxl345_xyz_accel_data { // TODO is this actually needed?
 #ifdef CONFIG_ADXL345_STREAM // TODO move to end of struct
 	uint8_t is_fifo: 1;
@@ -251,7 +250,7 @@ struct adxl345_dev_data {
 	struct gpio_callback int2_cb;
 	sensor_trigger_handler_t drdy_handler;
 	const struct sensor_trigger *drdy_trigger;
-//	const struct device *dev; // TODO rm, needed - refer directly
+	const struct device *dev; /* trigger cannot refer directly */
 # if defined(CONFIG_ADXL345_TRIGGER_OWN_THREAD)
 	K_KERNEL_STACK_MEMBER(thread_stack, CONFIG_ADXL345_THREAD_STACK_SIZE);
 	struct k_sem gpio_sem;
@@ -331,6 +330,9 @@ int adxl345_reg_read(const struct device *dev, uint8_t addr, uint8_t *data,
 int adxl345_reg_write_byte(const struct device *dev, uint8_t addr, uint8_t val);
 
 int adxl345_reg_read_byte(const struct device *dev, uint8_t addr, uint8_t *buf);
+
+int adxl345_reg_update_bits(const struct device *dev, uint8_t reg,
+			    uint8_t mask, uint8_t val);
 
 //int adxl345_set_op_mode(const struct device *dev, enum adxl345_op_mode op_mode); // TODO rm
 #ifdef CONFIG_SENSOR_ASYNC_API

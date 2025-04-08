@@ -664,7 +664,7 @@ static int adxl345_init(const struct device *dev)
 #ifdef CONFIG_ADXL345_TRIGGER
 	if (adxl345_init_interrupt(dev)) { 
 		/* no interrupt lines configured in DT */
-		LOG_WARN("ADXL345 trigger was configurd, but no IRQ lines defined. Fallback to FIFO BYPASSED");
+		LOG_WRN("ADXL345 trigger was configurd, but no IRQ lines defined. Fallback to FIFO BYPASSED");
 		fifo_mode = ADXL345_FIFO_BYPASSED;
 	} else {
 		fifo_mode = ADXL345_FIFO_STREAMED;

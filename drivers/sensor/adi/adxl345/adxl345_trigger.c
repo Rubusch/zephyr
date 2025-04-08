@@ -326,7 +326,8 @@ int adxl345_init_interrupt(const struct device *dev)
 		}
 	}
 
-//	drv_data->dev = dev; // TODO rm, needed?
+// TODO verify: dev is needed for threads, verify dev is already initialized when threads start
+	drv_data->dev = dev;
 
 	return 0;
 }
