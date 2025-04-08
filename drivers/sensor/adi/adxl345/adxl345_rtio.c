@@ -20,7 +20,7 @@ static void adxl345_submit_fetch(struct rtio_iodev_sqe *iodev_sqe)
 	uint32_t min_buffer_len = sizeof(struct adxl345_dev_data);
 	uint8_t *buffer;
 	uint32_t buffer_len;
-	struct adxl345_sample *data;
+	struct adxl345_xyz_accel_data *data;
 	int rc;
 
 	rc = rtio_sqe_rx_buf(iodev_sqe, min_buffer_len, min_buffer_len,
@@ -31,7 +31,7 @@ static void adxl345_submit_fetch(struct rtio_iodev_sqe *iodev_sqe)
 		goto err;
 	}
 
-	data = (struct adxl345_sample *)buffer;
+	data = (struct adxl345_xyz_accel_data *)buffer;
 
 	rc = adxl345_get_accel_data(dev, data);
 	if (rc) {
