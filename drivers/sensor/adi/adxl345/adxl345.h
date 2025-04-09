@@ -315,9 +315,6 @@ int adxl345_init_interrupt(const struct device *dev);
 
 #endif /* CONFIG_ADXL345_TRIGGER */
 
-int adxl345_reg_write_mask(const struct device *dev, uint8_t reg_addr,
-			   uint8_t mask, uint8_t data);
-
 int adxl345_reg_access(const struct device *dev, uint8_t cmd, uint8_t addr,
 		       uint8_t *data, size_t len);
 

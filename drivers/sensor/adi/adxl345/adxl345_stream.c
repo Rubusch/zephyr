@@ -16,11 +16,11 @@ void adxl345_submit_stream(const struct device *dev, struct rtio_iodev_sqe *iode
 	const struct sensor_read_config *cfg =
 			(const struct sensor_read_config *) iodev_sqe->sqe.iodev->data;
 	struct adxl345_dev_data *data = (struct adxl345_dev_data *)dev->data;
-	const struct adxl345_dev_config *cfg_345 = dev->config;
+//	const struct adxl345_dev_config *cfg_345 = dev->config; // TODO rm
 	uint8_t int_value = (uint8_t)~ADXL345_INT_MAP_WATERMARK_MSK;
 //	uint8_t fifo_watermark_irq = 0;
 //	uint8_t fifo_full_irq = 0; // TODO needed?
-	int rc;
+//	int rc;
 
 // TODO ->interrupt changed to gpio_int1 or gpio_int2
 //	int rc = gpio_pin_interrupt_configure_dt(&cfg_345->interrupt,
@@ -35,15 +35,14 @@ void adxl345_submit_stream(const struct device *dev, struct rtio_iodev_sqe *iode
 //			fifo_watermark_irq = 1; // TODO this is not used
 		}
 
-// TODO overrun?
-//		if (cfg->triggers[i].trigger == SENSOR_TRIG_FIFO_FULL) {
-//			int_value = ADXL345_INT_MAP_OVERRUN_MSK;
+// TODO check overrun, verify
+		if (cfg->triggers[i].trigger == SENSOR_TRIG_FIFO_FULL) {
+			int_value = ADXL345_INT_MAP_OVERRUN_MSK;
 //			fifo_full_irq = 1;
-//		}
+		}
 	}
 
 // TODO enable fifo mode: streamed
-
 //	uint8_t status;
 
 // TODO this is never evaluated
@@ -51,13 +50,16 @@ void adxl345_submit_stream(const struct device *dev, struct rtio_iodev_sqe *iode
 //		data->fifo_watermark_irq = fifo_watermark_irq;
 
 // TODO reg_update_bits()
-		if (adxl345_reg_write_mask(dev, ADXL345_REG_INT_MAP,
-					   ADXL345_INT_MAP_WATERMARK_MSK,
-					   int_value) < 0) {
+//		if (adxl345_reg_write_mask(dev, ADXL345_REG_INT_MAP,
+//					   ADXL345_INT_MAP_WATERMARK_MSK,
+//					   int_value) < 0) {
+		if (adxl345_reg_update_bits(dev, ADXL345_REG_INT_MAP,
+					    ADXL345_INT_MAP_WATERMARK_MSK,
+					    int_value)) {
 			return;
 		}
 
-/*
+//*
 // TODO set / confirm FIFO_STREAMED - why is it needed to re-init FIFO_CTRL from off this??
 
 // TODO in case reg read/write shall work only over  rtio_sqe_prep_tiny_write()
@@ -72,16 +74,20 @@ void adxl345_submit_stream(const struct device *dev, struct rtio_iodev_sqe *iode
 // -> enable measuring
 
 // ---
-		/ * Flush the FIFO by disabling it. Save current mode for after the reset. * /
-		enum adxl345_fifo_mode current_fifo_mode = data->fifo_config.fifo_mode;
+	/* Flush the FIFO by disabling it. Save current mode for after the reset. */
+//		enum adxl345_fifo_mode current_fifo_mode = data->fifo_config.fifo_mode;
+// TODO make fifo mode fallback to BYPASSED
 
 // FIXME: improve, just do reg_update_bits() w/ ADXL345_FIFO_STREAMED, ignore the rest
-		if (adxl345_reg_update_bits(def, ADXL345_REG_FIFO_CTL,
+		if (adxl345_reg_update_bits(dev, ADXL345_REG_FIFO_CTL,
 					    ADXL345_FIFO_CTL_MODE_MSK,
 					    ADXL345_FIFO_STREAMED)) {
 // even this is not good, use rtio_sqe_prep_tiny_write(), but then implement
 // "update bits" using rtio or write entire register (...) - why anyway? did it change?
+// TODO set FIFO samples
+// TODO set/enable FIFO watermark event
 
+// TODO rm below, fifo_trigger is definitely wrong!
 //		if (adxl345_configure_fifo_regs(dev, ADXL345_FIFO_STREAMED,
 //						data->fifo_config.fifo_trigger,
 //						data->fifo_config.fifo_samples)) {
@@ -97,7 +103,7 @@ void adxl345_submit_stream(const struct device *dev, struct rtio_iodev_sqe *iode
 //				data->fifo_config.fifo_samples);
 //		adxl345_reg_read_byte(dev, ADXL345_REG_FIFO_STATUS, &status);
 // */
-	}
+//	}
 
 	// TODO ->interrupt changed to gpio_int1 or gpio_int2
 //	rc = gpio_pin_interrupt_configure_dt(&cfg_345->interrupt,
@@ -112,7 +118,7 @@ void adxl345_submit_stream(const struct device *dev, struct rtio_iodev_sqe *iode
 static void adxl345_irq_en_cb(struct rtio *r, const struct rtio_sqe *sqr, void *arg)
 {
 	const struct device *dev = (const struct device *)arg;
-	const struct adxl345_dev_config *cfg = dev->config;
+//	const struct adxl345_dev_config *cfg = dev->config; // TODO rm
 
 // TODO ->interrupt changed to gpio_int1 or gpio_int2
 //	gpio_pin_interrupt_configure_dt(&cfg->interrupt, GPIO_INT_EDGE_TO_ACTIVE);
@@ -122,12 +128,13 @@ static void adxl345_irq_en_cb(struct rtio *r, const struct rtio_sqe *sqr, void *
 static void adxl345_fifo_flush_rtio(const struct device *dev)
 {
 	struct adxl345_dev_data *data = dev->data;
-	uint8_t fifo_config;
+//	uint8_t fifo_config;
 
 // TODO
 	// - disable measurement
 	// - do something?!
 	// - re-enable measurement
+	// - setup sqe stuff
 
 // TODO rm, did any of those values change since initial configuration??!!!
 //	fifo_config = (ADXL345_FIFO_CTL_TRIGGER_MODE(data->fifo_config.fifo_trigger) |
@@ -149,7 +156,7 @@ static void adxl345_fifo_flush_rtio(const struct device *dev)
 					2, NULL);
 // */
 
-	write_fifo_addr->flags |= RTIO_SQE_CHAINED;
+//	write_fifo_addr->flags |= RTIO_SQE_CHAINED;
 	struct rtio_sqe *complete_op = rtio_sqe_acquire(data->rtio_ctx);
 	rtio_sqe_prep_callback(complete_op, adxl345_irq_en_cb, (void *)dev, NULL);
 	rtio_submit(data->rtio_ctx, 0);
@@ -159,7 +166,7 @@ static void adxl345_fifo_read_cb(struct rtio *rtio_ctx, const struct rtio_sqe *s
 {
 	const struct device *dev = (const struct device *)arg;
 	struct adxl345_dev_data *data = (struct adxl345_dev_data *) dev->data;
-	const struct adxl345_dev_config *cfg = (const struct adxl345_dev_config *) dev->config;
+//	const struct adxl345_dev_config *cfg = (const struct adxl345_dev_config *) dev->config; // TODO rm
 	struct rtio_iodev_sqe *iodev_sqe = sqe->userdata;
 
 	if (data->fifo_samples == 0) { // TODO why only do this conditionally?
@@ -184,7 +191,7 @@ static void adxl345_process_fifo_samples_cb(struct rtio *r, const struct rtio_sq
 	uint8_t fifo_samples = FIELD_GET(ADLX345_FIFO_STATUS_ENTRIES_MSK, data->fifo_ent[0]); // TODO check this evaluates FIFO_STATUS entries reg
 	size_t sample_set_size = ADXL345_FIFO_SAMPLE_SIZE;
 	uint8_t fifo_bytes = fifo_samples * ADXL345_FIFO_SAMPLE_SIZE;
-	int ret;
+//	int ret; // TODO rm
 
 	data->sqe = NULL;
 
@@ -338,7 +345,7 @@ static void adxl345_process_status_cb(struct rtio *r, const struct rtio_sqe *sqr
 	}
 
 	bool fifo_wmark_irq = false;
-	bool fifo full_irq = false;
+	bool fifo_full_irq = false;
 
 	if ((fifo_wmark_cfg != NULL)
 			&& FIELD_GET(ADXL345_INT_MAP_WATERMARK_MSK, status)) {
@@ -346,7 +353,7 @@ static void adxl345_process_status_cb(struct rtio *r, const struct rtio_sqe *sqr
 		fifo_wmark_irq = true;
 	}
 
-	if ((fifo_full_cfg != NULL) && FIELD_GET(ADXL367_STATUS_FIFO_OVERRUN, status)) {
+	if ((fifo_full_cfg != NULL) && FIELD_GET(ADXL345_INT_MAP_OVERRUN_MSK, status)) {
 		fifo_full_irq = true;
 	}
 
