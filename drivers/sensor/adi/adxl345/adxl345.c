@@ -129,12 +129,12 @@ static inline bool adxl345_bus_is_ready(const struct device *dev)
 	return cfg->bus_is_ready(&cfg->bus);
 }
 
-#ifdef CONFIG_ADXL345_TRIGGER
 static const uint8_t adxl345_op_mode_init[] = {
 	[ADXL345_OP_STANDBY] = ADXL345_POWER_CTL_STANDBY_MODE,
 	[ADXL345_OP_MEASURE] = ADXL345_POWER_CTL_MEASURE_MODE,
 };
 
+#ifdef CONFIG_ADXL345_TRIGGER
 static bool adxl345_has_interrupt_lines(const struct device *dev)
 {
 	if (IS_ENABLED(CONFIG_ADXL345_TRIGGER)) {
@@ -152,7 +152,6 @@ static bool adxl345_has_interrupt_lines(const struct device *dev)
 int adxl345_set_measure_en(const struct device *dev, bool enable)
 {
 	int ret = 0;
-#ifdef CONFIG_ADXL345_TRIGGER
 	uint8_t val;
 	
 	/* set sensor to standby */
@@ -163,15 +162,14 @@ int adxl345_set_measure_en(const struct device *dev, bool enable)
 		return ret;
 	}
 
-	if (IS_ENABLED(CONFIG_ADXL345_TRIGGER)) {
-		/* set gpios to disabled */
-		ret = adxl345_set_gpios_en(dev, enable);
-		if (ret) {
-			return ret;
-		}
+#ifdef CONFIG_ADXL345_TRIGGER
+	/* set gpios to disabled */
+	ret = adxl345_set_gpios_en(dev, enable);
+	if (ret) {
+		return ret;
 	}
 #endif
-	
+
 	return ret;
 }
 
@@ -353,11 +351,10 @@ int adxl345_get_accel_data(const struct device *dev,
 			   struct adxl345_xyz_accel_data *sample)
 {
 	uint8_t axis_data[ADXL345_FIFO_SAMPLE_SIZE], status; //, fifo_status; // TODO
-//	struct adxl345_dev_data *data = dev->data;
 	int ret;
 
-	if (!IS_ENABLED(CONFIG_ADXL345_TRIGGER)) { // TODO break out earlier
-		do { /* polling read */
+	if (!IS_ENABLED(CONFIG_ADXL345_TRIGGER)) {
+		do {
 			adxl345_get_status(dev, &status);
 		} while (!FIELD_GET(ADXL345_INT_MAP_DATA_RDY_MSK, status));
 	}
@@ -369,18 +366,10 @@ int adxl345_get_accel_data(const struct device *dev,
 		return ret;
 	}
 
-/* // TODO rm
-	raw_x = axis_data[0] | (axis_data[1] << 8);
-	raw_y = axis_data[2] | (axis_data[3] << 8);
-	raw_z = axis_data[4] | (axis_data[5] << 8);
-
-	sample->x = raw_x;
-	sample->y = raw_y;
-	sample->z = raw_z;
-// */
 	sample->x = axis_data[0] | axis_data[1] << 8;
 	sample->y = axis_data[2] | axis_data[3] << 8;
 	sample->z = axis_data[4] | axis_data[5] << 8;
+
 #ifdef CONFIG_ADXL345_TRIGGER
 	struct adxl345_dev_data *data = dev->data;
 	sample->is_full_res = data->is_full_res; /* needed for decoder */
@@ -403,7 +392,6 @@ void adxl345_accel_convert(struct sensor_value *out, int16_t sample)
 	if (sample & BIT(11)) {
 		sample |= ADXL345_COMPLEMENT_MASK(12);
 	}
-
 	out->val1 = ((sample * SENSOR_G) / 32) / 1000000;
 	out->val2 = ((sample * SENSOR_G) / 32) % 1000000;
 }
@@ -412,8 +400,6 @@ static int adxl345_sample_fetch(const struct device *dev,
 				enum sensor_channel chan)
 {
 	struct adxl345_dev_data *data = dev->data;
-//	struct adxl345_dev_config *cfg = dev->config; // TODO rm
-//	struct adxl345_xyz_accel_data sample; // TODO rm
 	uint8_t regval, count;
 	int rc;
 
@@ -617,7 +603,6 @@ static int adxl345_init(const struct device *dev)
 	struct adxl345_dev_data *data = dev->data;
 	uint8_t dev_id;
 	const struct adxl345_dev_config *cfg = dev->config;
-	enum adxl345_fifo_mode fifo_mode; // TODO make dependend on gpio available
 
 	if (!adxl345_bus_is_ready(dev)) {
 		LOG_ERR("bus not ready");
@@ -627,7 +612,8 @@ static int adxl345_init(const struct device *dev)
 	/* check chip ID */
 	rc = adxl345_reg_read_byte(dev, ADXL345_REG_DEVICE_ID, &dev_id);
 	if (rc < 0 || dev_id != ADXL345_PART_ID) {
-		LOG_ERR("Invalid chip ID or reading bus failed: 0x%x\n", rc);
+		LOG_ERR("Invalid chip ID [0x%02x] or reading bus failed: 0x%x\n",
+			dev_id, rc);
 		return -ENODEV;
 	}
 
@@ -645,7 +631,7 @@ static int adxl345_init(const struct device *dev)
 	 * - turn off 3-wire SPI
 	 * - turn off self test mode
 	 */
-	rc = adxl345_reg_write_byte(dev, ADXL345_REG_DATA_FORMAT, 0x00 |
+	rc = adxl345_reg_write_byte(dev, ADXL345_REG_DATA_FORMAT, /* 0x00 | */
 				    (data->is_full_res ? ADXL345_DATA_FORMAT_FULL_RES : 0x00) |
 				    adxl345_range_init[data->selected_range]);
 	if (rc < 0) {
@@ -660,7 +646,7 @@ static int adxl345_init(const struct device *dev)
 
 	k_sleep(K_MSEC(100)); // TODO check if _really needed
 
-	fifo_mode = ADXL345_FIFO_BYPASSED;
+	enum adxl345_fifo_mode fifo_mode = ADXL345_FIFO_BYPASSED;
 #ifdef CONFIG_ADXL345_TRIGGER
 	if (adxl345_init_interrupt(dev)) { 
 		/* no interrupt lines configured in DT */
