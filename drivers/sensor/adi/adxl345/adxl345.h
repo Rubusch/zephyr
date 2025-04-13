@@ -297,6 +297,7 @@ void adxl345_stream_irq_handler(const struct device *dev);
 
 int adxl345_set_measure_en(const struct device *dev, bool en);
 
+int adxl345_reset_events(const struct device *dev);
 void debug_regs(const struct device *dev); // TODO rm, debugging
 
 #ifdef CONFIG_ADXL345_TRIGGER

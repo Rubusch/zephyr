@@ -25,20 +25,20 @@ static int adxl345_set_int_pad_state(const struct device *dev, uint8_t pad,
 	const struct adxl345_dev_config *cfg = dev->config;
 	int state = en ? GPIO_INT_EDGE_TO_ACTIVE : GPIO_INT_DISABLE;
 
-LOG_INF("called - pad: %d, en: %s", pad, en ? "true" : "false");
+LOG_INF("INTERRUPT INT_%d -> %s", pad, en ? "ON" : "OFF");
 
-	/* in case trigger mode, but neither INT_1 nor INT_2 defined */
+	/* in case of neither INT_1 nor INT_2 being defined */
 	if (!cfg->gpio_int1.port && !cfg->gpio_int2.port) {
 		LOG_INF("neither INT1, nor INT2 have port - no interrupts defined!");
 		return -ENOTSUP;
 	}
 
 	if (pad == 1) {
-		LOG_INF("configure INT1");
 		return gpio_pin_interrupt_configure_dt(&cfg->gpio_int1, state);
+		LOG_INF("INT_1 %s", en ? "enabled" : "disabled");
 	} else if (pad == 2) {
-		LOG_INF("configure INT2");
 		return gpio_pin_interrupt_configure_dt(&cfg->gpio_int2, state);
+		LOG_INF("INT_2 %s", en ? "enabled" : "disabled");
 	} else {
 		LOG_INF("no pad to configure (-1)");
 		/* pad may be -1, e.g. if no INT line defined in DT */
@@ -49,8 +49,6 @@ LOG_INF("called - pad: %d, en: %s", pad, en ? "true" : "false");
 int adxl345_set_gpios_en(const struct device *dev, bool en)
 {
 	const struct adxl345_dev_config *cfg = dev->config;
-
-LOG_INF("called - %s", en ? "true" : "false"); // TODO rm
 
 	return adxl345_set_int_pad_state(dev, cfg->drdy_pad, en);
 }
@@ -95,32 +93,19 @@ LOG_INF("called - %s", en ? "true" : "false"); // TODO rm
  */
 static void adxl345_handle_interrupt(const struct device *dev)
 {
-	const struct adxl345_dev_config *cfg = dev->config;
 	struct adxl345_dev_data *drv_data = dev->data;
+	const struct adxl345_dev_config *cfg = dev->config;
 	uint8_t status;
-	uint8_t fifo_entries;
 	int rc;
 
-LOG_INF("XXX called - interrupt caught! XXX");
+LOG_INF("XXX interrupt caught! XXX");
 
 	/* clear the status */
 	rc = adxl345_get_status(dev, &status);
 	__ASSERT(rc == 0, "Interrupt configuration failed");
 
-LOG_INF("INT_SOURCE: %02x", status); // TODO rm
-
-	/* clear FIFO status */
-	rc = adxl345_get_fifo_entries(dev, &fifo_entries);
-	__ASSERT(rc == 0, "Interrupt configuration failed");
-
-LOG_INF("FIFO_STATUS: %02x", fifo_entries); // TODO rm
-
 	/* handle FIFO: watermark */
 	if (FIELD_GET(ADXL345_INT_MAP_WATERMARK_MSK, status)) {
-
-//		int nsamples = FIELD_GET(ADXL345_FIFO_CTL_SAMPLES_MSK, fifo_entries);
-// TODO read out samples ?
-
 		if (drv_data->wm_handler) {
 			drv_data->wm_handler(dev, drv_data->wm_trigger);
 		}
@@ -142,10 +127,20 @@ LOG_INF("FIFO_STATUS: %02x", fifo_entries); // TODO rm
 			drv_data->overrun_handler(dev, drv_data->overrun_trigger);
 		}
 
-		/* reset all registers */
+		/* reset FIFO and status */
+		adxl345_reset_events(dev);
+
 		rc = adxl345_set_int_pad_state(dev, cfg->drdy_pad, true);
 		__ASSERT(rc == 0, "Interrupt configuration failed");
 	}
+
+	/*
+	 * The sensor won't generate new interrupts if watermark, data ready
+	 * and/or overrun is still set. To unset the status flags, either
+	 * consume FIFO content in a provided handler, or fallback to this
+	 * reset here.
+	 */
+	adxl345_reset_events(dev);
 }
 #endif
 
@@ -231,7 +226,6 @@ int adxl345_trigger_set(const struct device *dev,
 {
 	const struct adxl345_dev_config *cfg = dev->config;
 	struct adxl345_dev_data *drv_data = dev->data;
-	uint8_t status;
 	int rc;
 
 LOG_INF("called"); // TODO rm
@@ -282,20 +276,18 @@ LOG_INF("called"); // TODO rm
 		return -ENOTSUP;
 	}
 
-	/* clear status and fifo status */
-	rc = adxl345_get_status(dev, &status);
+	rc = adxl345_set_gpios_en(dev, true);
 	if (rc) {
 		return rc;
 	}
 
-	rc = adxl345_get_fifo_entries(dev, &status);
-	if (rc) {
-		return rc;
-	}
+	debug_regs(dev);
 
-debug_regs(dev); // TODO rm
+	/* clear status and fifo status, enable measurement */
+//	return adxl345_reset_events(dev);
 
 	return adxl345_set_measure_en(dev, handler != NULL);
+//	return 0;
 }
 
 int adxl345_init_interrupt(const struct device *dev)
