@@ -16,7 +16,7 @@ properties:
       The pin defaults to active high when produced by the sensor. The property
       specifies the INT_2 line of the sensor.
 
-  drdy-int-pad:
+  drdy-pin:
     type: int
     enum: [1, 2]
     description: |

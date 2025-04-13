@@ -50,13 +50,13 @@
 #define ADXL345_REG_INT_MAP			0x2f
 #define ADXL345_REG_INT_SOURCE			0x30
 #define ADXL345_REG_DATA_FORMAT			0x31
-#define ADXL345_REG_DATAX0			0x32
-#define ADXL345_REG_DATA_XYZ_REGS		0x32 // TODO use?
+#define ADXL345_REG_DATAX0			0x32 // TODO rm, prefer DATA_XYZ_REGS
+#define ADXL345_REG_DATA_XYZ_REGS		0x32 // TODO use this
 /* DATAX0, DATAX1, DATAY0, DATAY1, DATAZ0, DATAZ1 - each 8-bit, output data */
 #define ADXL345_REG_FIFO_CTL			0x38
 #define ADXL345_REG_FIFO_STATUS			0x39
 
-
+/* Regstier fields / content values */
 #define ADXL345_PART_ID				0xe5
 
 #define ADXL345_DATA_FORMAT_RIGHT_JUSTIFY	BIT(2) /* 1: data is left justified on MSB */
@@ -229,19 +229,11 @@ union adxl345_bus {
 };
 
 struct adxl345_dev_data {
-/* // TODO replace this by sample? or replace sample by this?
-	int16_t bufx[ADXL345_MAX_FIFO_SIZE];
-	int16_t bufy[ADXL345_MAX_FIFO_SIZE];
-	int16_t bufz[ADXL345_MAX_FIFO_SIZE];
-/*/
 	struct adxl345_xyz_accel_data sample[ADXL345_MAX_FIFO_SIZE];
 	int sample_number;
 	int sample_idx;
-// */
-
- 	struct adxl345_fifo_config fifo_config; // TODO rm -> move to config
-
-//	uint8_t fifo_samples;
+ 	struct adxl345_fifo_config fifo_config;
+//	uint8_t fifo_samples; // TODO needed?
 	bool is_full_res; /* STREAM: to init sample for decoder */
 	enum adxl345_range selected_range; /* STREAM: init sample for decoder */
 	enum adxl345_odr odr;
@@ -250,7 +242,11 @@ struct adxl345_dev_data {
 	struct gpio_callback int2_cb;
 	sensor_trigger_handler_t drdy_handler;
 	const struct sensor_trigger *drdy_trigger;
-	const struct device *dev; /* trigger cannot refer directly */
+	sensor_trigger_handler_t wm_handler;
+	const struct sensor_trigger *wm_trigger;
+	sensor_trigger_handler_t overrun_handler;
+	const struct sensor_trigger *overrun_trigger;
+	const struct device *dev; /* trigger cannot refer dev directly */
 # if defined(CONFIG_ADXL345_TRIGGER_OWN_THREAD)
 	K_KERNEL_STACK_MEMBER(thread_stack, CONFIG_ADXL345_THREAD_STACK_SIZE);
 	struct k_sem gpio_sem;
@@ -301,8 +297,10 @@ void adxl345_stream_irq_handler(const struct device *dev);
 
 int adxl345_set_measure_en(const struct device *dev, bool en);
 
+void debug_regs(const struct device *dev); // TODO rm, debugging
+
 #ifdef CONFIG_ADXL345_TRIGGER
-int adxl345_get_fifo_status(const struct device *dev, uint8_t *fifo_entries); // TODO										         // used?
+int adxl345_get_fifo_entries(const struct device *dev, uint8_t *fifo_entries); // TODO										         // used?
 									      // for
 									      // what?
 int adxl345_get_status(const struct device *dev, uint8_t *status);
