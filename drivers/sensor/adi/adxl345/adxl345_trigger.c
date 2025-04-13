@@ -231,7 +231,8 @@ int adxl345_trigger_set(const struct device *dev,
 LOG_INF("called"); // TODO rm
 
 	if (!cfg->gpio_int1.port && !cfg->gpio_int2.port) {
-		return -ENOTSUP;
+		/* might be in FIFO BYPASS mode */
+		goto done;
 	}
 
 	/* generally turn off interrupts */
@@ -283,11 +284,11 @@ LOG_INF("called"); // TODO rm
 
 	debug_regs(dev);
 
+done:
 	/* clear status and fifo status, enable measurement */
 //	return adxl345_reset_events(dev);
 
 	return adxl345_set_measure_en(dev, handler != NULL);
-//	return 0;
 }
 
 int adxl345_init_interrupt(const struct device *dev)

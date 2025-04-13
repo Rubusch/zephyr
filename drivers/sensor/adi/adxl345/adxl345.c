@@ -177,11 +177,12 @@ void debug_regs(const struct device *dev)
 
 int adxl345_reset_events(const struct device *dev)
 {
+	LOG_INF("CLEANING..."); // TODO rm
+
+#ifdef CONFIG_ADXL345_TRIGGER
 	uint8_t status, fifo_entries;
 	int rc;
 
-	LOG_INF("CLEANING..."); // TODO rm
-		
 	rc = adxl345_set_measure_en(dev, false);
 	if (rc) {
 		return rc;
@@ -210,6 +211,8 @@ int adxl345_reset_events(const struct device *dev)
 	}
 
 	debug_regs(dev);
+
+#endif /* CONFIG_ADXL345_TRIGGER */
 
 	return adxl345_set_measure_en(dev, true);
 }
@@ -479,59 +482,6 @@ static DEVICE_API(sensor, adxl345_api_funcs) = {
 	.get_decoder = adxl345_get_decoder,
 #endif
 };
-
-// TODO rm, this is done in adxl345_trigger.c
-// #ifdef CONFIG_ADXL345_TRIGGER
-// /**
-//  * Configure the INT1 and INT2 interrupt pins.
-//  * @param dev - The device structure.
-//  * @param events - Bitfield of the sensor events to enable.
-//  * @return 0 in case of success, negative error code otherwise.
-//  */
-// static int adxl345_configure_interrupt_regs(const struct device *dev,
-// 					 uint8_t events)
-// {
-// 	const struct adxl345_dev_config *cfg = dev->config;
-// 	uint8_t samples;
-// 	int ret;
-// 	
-// // TODO int_line -> mech to set int1 or int2 active interrupt from dev or dev->config
-// 
-// 	/* Map events to interrupt line */
-// // TODO obtain mapping from enabled events in DT
-// // TODO obtain mapping of drdy in DT
-// //	ret = adxl345_reg_write_byte(dev, ADXL345_REG_INT_MAP, int_line ? 0xff : 0);
-// //	if (ret) {
-// //		return ret;
-// //	}
-// 
-// 	/* Enable selected interrupt event */
-// 	ret = adxl345_reg_write_byte(dev, ADXL345_REG_INT_ENABLE,
-// 			int_line ? events : ^events);
-// 	if (ret) {
-// 		return ret;
-// 	}
-// 
-// // TODO rm
-// //	ret = adxl345_reg_read_byte(dev, ADXL345_REG_INT_MAP, &samples);
-// //	if (ret) {
-// //		return ret;		
-// //	}
-// //	
-// //	ret = adxl345_reg_read_byte(dev, ADXL345_REG_INT_ENABLE, &samples);
-// //	if (ret) {
-// //		return ret;
-// //	}
-// 
-// // TODO rm, needed here, or better in _init_interrupt()???
-// //	ret = gpio_pin_interrupt_configure_dt(&cfg->interrupt, GPIO_INT_EDGE_TO_ACTIVE);
-// //	if (ret < 0) {
-// //		return ret;
-// //	}
-// 
-// 	return 0;
-// }
-// #endif
 
 /**
  * adxl345_setup - Enable sensor events if possible.
