@@ -98,21 +98,14 @@ static void adxl345_handle_interrupt(const struct device *dev)
 	uint8_t status;
 	int rc;
 
-LOG_INF("XXX interrupt caught! XXX");
+LOG_INF("TRIGGER: interrupt caught!!!"); // TODO rm
 
 	/* clear the status */
 	rc = adxl345_get_status(dev, &status);
 	__ASSERT(rc == 0, "Interrupt configuration failed");
 
-	/* handle FIFO: watermark */
-	if (FIELD_GET(ADXL345_INT_MAP_WATERMARK_MSK, status)) {
-		if (drv_data->wm_handler) {
-			drv_data->wm_handler(dev, drv_data->wm_trigger);
-		}
-	}
-
 	/* handle FIFO: data ready */
-	if (FIELD_GET(ADXL345_INT_MAP_DATA_RDY_MSK, status)) {
+	if (FIELD_GET(ADXL345_INT_DATA_RDY, status)) {
 		if (drv_data->drdy_handler) {
 			drv_data->drdy_handler(dev, drv_data->drdy_trigger);
 		}
@@ -121,14 +114,18 @@ LOG_INF("XXX interrupt caught! XXX");
 		__ASSERT(rc == 0, "Interrupt configuration failed");
 	}
 
+	/* handle FIFO: watermark */
+	if (FIELD_GET(ADXL345_INT_WATERMARK, status)) {
+		if (drv_data->wm_handler) {
+			drv_data->wm_handler(dev, drv_data->wm_trigger);
+		}
+	}
+
 	/* handle FIFO: overrun */
-	if (FIELD_GET(ADXL345_INT_MAP_OVERRUN_MSK, status)) {
+	if (FIELD_GET(ADXL345_INT_OVERRUN, status)) {
 		if (drv_data->overrun_handler) {
 			drv_data->overrun_handler(dev, drv_data->overrun_trigger);
 		}
-
-		/* reset FIFO and status */
-		adxl345_reset_events(dev);
 
 		rc = adxl345_set_int_pad_state(dev, cfg->drdy_pad, true);
 		__ASSERT(rc == 0, "Interrupt configuration failed");
@@ -246,17 +243,18 @@ LOG_INF("called"); // TODO rm
 		drv_data->drdy_handler = handler;
 		drv_data->drdy_trigger = trig;
 		rc = adxl345_reg_update_bits(dev, ADXL345_REG_INT_ENABLE,
-					      ADXL345_INT_MAP_DATA_RDY_MSK,
+					      ADXL345_INT_DATA_RDY,
 					      0xff);
 		if (rc) {
 			return rc;
 		}
+
 		break;
 	case SENSOR_TRIG_FIFO_WATERMARK:
 		drv_data->wm_handler = handler;
 		drv_data->wm_trigger = trig;
 		rc = adxl345_reg_update_bits(dev, ADXL345_REG_INT_ENABLE,
-					      ADXL345_INT_MAP_WATERMARK_MSK,
+					      ADXL345_INT_WATERMARK,
 					      0xff);
 		if (rc) {
 			return rc;
@@ -266,7 +264,7 @@ LOG_INF("called"); // TODO rm
 		drv_data->overrun_handler = handler;
 		drv_data->overrun_trigger = trig;
 		rc = adxl345_reg_update_bits(dev, ADXL345_REG_INT_ENABLE,
-					      ADXL345_INT_MAP_OVERRUN_MSK,
+					      ADXL345_INT_OVERRUN,
 					      0xff);
 		if (rc) {
 			return rc;
@@ -286,7 +284,7 @@ LOG_INF("called"); // TODO rm
 
 done:
 	/* clear status and fifo status, enable measurement */
-//	return adxl345_reset_events(dev);
+	adxl345_reset_events(dev);
 
 	return adxl345_set_measure_en(dev, handler != NULL);
 }

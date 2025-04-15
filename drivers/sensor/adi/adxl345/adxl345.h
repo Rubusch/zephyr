@@ -95,21 +95,21 @@ static const uint8_t adxl345_range_init[] = {
 //#define ADXL345_STATUS_DATA_RDY(x)   (((x) >> 7) & 0x1) // TODO rm
 
 /* ADXL345_INT_MAP */
-#define ADXL345_INT_MAP_OVERRUN_MSK		BIT(0)
+#define ADXL345_INT_OVERRUN			BIT(0)
 //#define ADXL345_INT_MAP_OVERRUN_MODE(x)    (((x) & 0x1) << 0) // TODO rm, set overrun mode, really??!!!
-#define ADXL345_INT_MAP_WATERMARK_MSK		BIT(1)
+#define ADXL345_INT_WATERMARK			BIT(1)
 //#define ADXL345_INT_MAP_WATERMARK_MODE(x)  (((x) & 0x1) << 1) // TODO rm, not used
-#define ADXL345_INT_MAP_FREE_FALL_MSK		BIT(2)
+#define ADXL345_INT_FREE_FALL			BIT(2)
 //#define ADXL345_INT_MAP_FREE_FALL_MODE(x)  (((x) & 0x1) << 2) // TODO rm, not used
-#define ADXL345_INT_MAP_INACT_MSK		BIT(3)
+#define ADXL345_INT_INACT			BIT(3)
 //#define ADXL345_INT_MAP_INACT_MODE(x)      (((x) & 0x1) << 3) // TODO rm, not used
-#define ADXL345_INT_MAP_ACT_MSK			BIT(4)
+#define ADXL345_INT_ACT				BIT(4)
 //#define ADXL345_INT_MAP_ACT_MODE(x)        (((x) & 0x1) << 4) // TODO rm, not used
-#define ADXL345_INT_MAP_DOUBLE_TAP_MSK		BIT(5)
+#define ADXL345_INT_DOUBLE_TAP			BIT(5)
 //#define ADXL345_INT_MAP_DOUBLE_TAP_MODE(x) (((x) & 0x1) << 5) // TODO rm, not used
-#define ADXL345_INT_MAP_SINGLE_TAP_MSK		BIT(6)
+#define ADXL345_INT_SINGLE_TAP			BIT(6)
 //#define ADXL345_INT_MAP_SINGLE_TAP_MODE(x) (((x) & 0x1) << 6) // TODO rm, not used
-#define ADXL345_INT_MAP_DATA_RDY_MSK		BIT(7)
+#define ADXL345_INT_DATA_RDY			BIT(7)
 //#define ADXL345_INT_MAP_DATA_RDY_MODE(x)   (((x) & 0x1) << 7) // TODO rm, not used
 
 /* POWER_CTL */
@@ -247,6 +247,7 @@ struct adxl345_dev_data {
 	sensor_trigger_handler_t overrun_handler;
 	const struct sensor_trigger *overrun_trigger;
 	const struct device *dev; /* trigger cannot refer dev directly */
+	uint8_t cached_int_enable;
 # if defined(CONFIG_ADXL345_TRIGGER_OWN_THREAD)
 	K_KERNEL_STACK_MEMBER(thread_stack, CONFIG_ADXL345_THREAD_STACK_SIZE);
 	struct k_sem gpio_sem;
@@ -267,6 +268,7 @@ struct adxl345_dev_data {
 //	uint8_t fifo_watermark_irq;  // TODO rm?
 	uint8_t fifo_samples; // TODO rm, duplicate? in case rename "fifo_samples_current"
 	uint16_t fifo_total_bytes;
+	uint8_t cached_power_ctl;
 #endif /* CONFIG_ADXL345_STREAM */
 };
 

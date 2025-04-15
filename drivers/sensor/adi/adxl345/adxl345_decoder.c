@@ -310,11 +310,11 @@ static bool adxl345_decoder_has_trigger(const uint8_t *buffer, enum sensor_trigg
 
 	switch (trigger) {
 	case SENSOR_TRIG_DATA_READY: // TODO verify, this is missing?
-		return FIELD_GET(ADXL345_INT_MAP_DATA_RDY_MSK, data->int_status);
+		return FIELD_GET(ADXL345_INT_DATA_RDY, data->int_status);
 	case SENSOR_TRIG_FIFO_WATERMARK:
-		return FIELD_GET(ADXL345_INT_MAP_WATERMARK_MSK, data->int_status);
+		return FIELD_GET(ADXL345_INT_WATERMARK, data->int_status);
 	case SENSOR_TRIG_FIFO_FULL: // TODO verify, this is missing?
-		return FIELD_GET(ADXL345_INT_MAP_OVERRUN_MSK, data->int_status);
+		return FIELD_GET(ADXL345_INT_OVERRUN, data->int_status);
 	default:
 		return false;
 	}

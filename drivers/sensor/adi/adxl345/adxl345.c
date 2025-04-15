@@ -115,8 +115,25 @@ int adxl345_reg_update_bits(const struct device *dev, uint8_t reg,
 	if (rc) {
 		return rc;
 	}
+
 	tmp = regval & ~mask;
 	tmp |= val & mask;
+
+#ifdef CONFIG_ADXL345_TRIGGER
+	struct adxl345_dev_data *data = dev->data;
+	switch (reg) {
+#ifdef CONFIG_ADXL345_STREAM
+	case ADXL345_REG_POWER_CTL:
+		data->cached_power_ctl = tmp;
+		break;
+#endif /* CONFIG_ADXL345_STREAM */
+	case ADXL345_REG_INT_ENABLE:
+		data->cached_int_enable = tmp;
+		break;
+	default:
+		break;
+	}
+#endif /* CONFIG_ADXL345_TRIGGER */
 
 	return adxl345_reg_write_byte(dev, reg, tmp);
 }
@@ -175,12 +192,23 @@ void debug_regs(const struct device *dev)
 }
 // */
 
+int adxl345_set_measure_en(const struct device *dev, bool en)
+{
+	uint8_t val = adxl345_op_mode_init[en ? ADXL345_OP_MEASURE
+					   : ADXL345_OP_STANDBY];
+
+LOG_INF("MEASUREMENT: %s", en ? "ON" : "OFF"); // TODO rm
+
+	return adxl345_reg_update_bits(dev, ADXL345_REG_POWER_CTL,
+				      ADXL345_POWER_CTL_MODE_MSK, val);
+}
+
 int adxl345_reset_events(const struct device *dev)
 {
 	LOG_INF("CLEANING..."); // TODO rm
 
 #ifdef CONFIG_ADXL345_TRIGGER
-	uint8_t status, fifo_entries;
+	struct adxl345_dev_data *data = dev->data;
 	int rc;
 
 	rc = adxl345_set_measure_en(dev, false);
@@ -188,42 +216,38 @@ int adxl345_reset_events(const struct device *dev)
 		return rc;
 	}
 
-	/* clear interrupt status */
-	rc = adxl345_get_status(dev, &status);
-	if (rc) {
-		return rc;
-	}
-	LOG_INF("status %02x [00] - after reading ", status); // TODO rm
-
-	/* clear FIFO status */
-	rc = adxl345_get_fifo_entries(dev, &fifo_entries);
+	/* clear INT_ENABLE to reset INT_SOURCE i.e. interrupt status */
+	rc = adxl345_reg_write_byte(dev, ADXL345_REG_INT_ENABLE, 0x00);
 	if (rc) {
 		return rc;
 	}
 
-	for (int i = 0; i < fifo_entries + 1; i++) {
-		uint8_t axis_data[ADXL345_FIFO_SAMPLE_SIZE];
-		rc = adxl345_reg_read(dev, ADXL345_REG_DATA_XYZ_REGS,
-				      axis_data, ADXL345_FIFO_SAMPLE_SIZE);
-		if (rc) {
-			return rc;
-		}
+	/* restore INT_ENABLE reg */
+	rc = adxl345_reg_write_byte(dev, ADXL345_REG_INT_ENABLE,
+				    data->cached_int_enable);
+	if (rc) {
+		return rc;
 	}
 
-	debug_regs(dev);
+	/* clear FIFO entries: switch to FIFO_BYPASSED */
+	rc = adxl345_reg_write_byte(dev, ADXL345_REG_FIFO_CTL,
+				    adxl345_fifo_ctl_mode_init[ADXL345_FIFO_BYPASSED]);
+	if (rc) {
+		return rc;
+	}
+
+	/* restore FIFO_CTL reg */
+	rc = adxl345_reg_write_byte(dev, ADXL345_REG_FIFO_CTL,
+				    data->fifo_config.fifo_mode);
+	if (rc) {
+		return rc;
+	}
+
+//	debug_regs(dev);
 
 #endif /* CONFIG_ADXL345_TRIGGER */
 
 	return adxl345_set_measure_en(dev, true);
-}
-
-int adxl345_set_measure_en(const struct device *dev, bool en)
-{
-	uint8_t val = adxl345_op_mode_init[en ? ADXL345_OP_MEASURE
-					   : ADXL345_OP_STANDBY];
-
-	return adxl345_reg_update_bits(dev, ADXL345_REG_POWER_CTL,
-				      ADXL345_POWER_CTL_MODE_MSK, val);
 }
 
 int adxl345_get_fifo_entries(const struct device *dev, uint8_t *fifo_entries)
@@ -350,7 +374,7 @@ int adxl345_get_accel_data(const struct device *dev,
 	if (!IS_ENABLED(CONFIG_ADXL345_TRIGGER)) {
 		do {
 			adxl345_get_status(dev, &status);
-		} while (!FIELD_GET(ADXL345_INT_MAP_DATA_RDY_MSK, status));
+		} while (!FIELD_GET(ADXL345_INT_DATA_RDY, status));
 	}
 
 	ret = adxl345_reg_read(dev, ADXL345_REG_DATA_XYZ_REGS, axis_data, 6);
@@ -396,6 +420,8 @@ static int adxl345_sample_fetch(const struct device *dev,
 	uint8_t count;
 	int rc;
 
+//LOG_INF("called"); // TODO rm
+
 	count = 1;
 
 	/* FIFO BYPASSED is the only mode not using a FIFO buffer */
@@ -417,7 +443,7 @@ static int adxl345_sample_fetch(const struct device *dev,
 		}
 
 #ifdef CONFIG_ADXL345_STREAM
-		data->sample[s].is_fifo = 0;
+		data->sample[s].is_fifo = 0; // TODO bool -> false
 #endif
 	}
 
@@ -436,7 +462,7 @@ static int adxl345_channel_get(const struct device *dev,
 	int idx;
 
 	if (data->sample_number <= 0) {
-		LOG_WRN("sample_number is %d, in case call fetch before",
+		LOG_INF("sample_number is %d, in case call fetch before",
 			data->sample_number);
 		return 0;
 	}
@@ -463,9 +489,6 @@ static int adxl345_channel_get(const struct device *dev,
 	default:
 		return -ENOTSUP;
 	}
-
-// TODO rm or use for fifo read outs
-//	data->sample_idx++;
 
 	return 0;
 }
@@ -522,13 +545,13 @@ static DEVICE_API(sensor, adxl345_api_funcs) = {
 //		/* enable sensor events and/or FIFO events */
 //		if (cfg->drdy_pad > 0) {
 //			/* enable FIFO watermark */
-//			regval |= FIELD_PREP(ADXL345_INT_MAP_WATERMARK_MSK, 0xff);
+//			regval |= FIELD_PREP(ADXL345_INT_WATERMARK, 0xff);
 //
 //			/* enable FIFO signalling data ready */
-//			regval |= FIELD_PREP(ADXL345_INT_MAP_DATA_RDY_MSK, 0xff);
+//			regval |= FIELD_PREP(ADXL345_INT_DATA_RDY, 0xff);
 //
 //			/* enable FIFO signalling overrun */
-//			regval |= FIELD_PREP(ADXL345_INT_MAP_OVERRUN_MSK, 0xff);
+//			regval |= FIELD_PREP(ADXL345_INT_OVERRUN, 0xff);
 //		}
 //	}
 //#endif
@@ -599,10 +622,14 @@ LOG_INF("called"); // TODO rm
 		return rc;
 	}
 
-	rc = adxl345_reg_write_byte(dev, ADXL345_REG_INT_ENABLE, 0x00);
+	int_en = 0x00;
+	rc = adxl345_reg_write_byte(dev, ADXL345_REG_INT_ENABLE, int_en);
 	if (rc) {
 		return rc;
 	}
+#ifdef CONFIG_ADXL345_STREAM
+	data->cached_int_enable = int_en;
+#endif /* CONFIG_ADXL345_STREAM */
 
 	k_sleep(K_MSEC(100)); // TODO check if _really needed
 
@@ -616,29 +643,36 @@ LOG_INF("called"); // TODO rm
 		LOG_INF("set FIFO STREAMED mode"); // TODO rm
 		fifo_mode = ADXL345_FIFO_STREAMED;
 
+		/*
+		 * Currently, map all interrupts to the (same) gpio line
+		 * configured in the device tree.
+		 */
 		int_mask = 0xff;
-		LOG_INF("cfg->drdy_pad == %d", cfg->drdy_pad); // TODO rm
 		int_en = (cfg->drdy_pad == 2) ? int_mask : ~int_mask;
 		rc = adxl345_reg_update_bits(dev, ADXL345_REG_INT_MAP,
-					      int_mask, int_en);
+					     int_mask, int_en);
 		if (rc) {
 			return rc;
 		}
 
+		/*
+		 * Wipe out dangling FIFO entries or interrupt status, which
+		 * would prevent sensor event generation.
+		 */
 		rc = adxl345_reset_events(dev);
 		if (rc) {
 			return rc;
 		}
 	}
 #endif
+
 	rc = adxl345_configure_fifo(dev, fifo_mode, ADXL345_INT_UNSET,
 				    ADXL345_FIFO_CTL_SAMPLES_MSK);
 	if (rc) {
 		return rc;
 	}
 
-// debug_regs(dev); // TODO rm
-//	return adxl345_setup_events(dev);
+debug_regs(dev); // TODO rm
 
 	return adxl345_set_measure_en(dev, true);
 }

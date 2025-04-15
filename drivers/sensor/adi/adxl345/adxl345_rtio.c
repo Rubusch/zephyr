@@ -23,6 +23,8 @@ static void adxl345_submit_fetch(struct rtio_iodev_sqe *iodev_sqe)
 	struct adxl345_xyz_accel_data *data;
 	int rc;
 
+LOG_INF("called"); // TODO rm
+
 	rc = rtio_sqe_rx_buf(iodev_sqe, min_buffer_len, min_buffer_len,
 			     &buffer, &buffer_len);
 	if (rc) {
@@ -50,6 +52,8 @@ void adxl345_submit(const struct device *dev, struct rtio_iodev_sqe *iodev_sqe)
 {
 	struct rtio_work_req *req;
 	const struct sensor_read_config *cfg_iodev;
+	
+LOG_INF("called"); // TODO rm
 
 	cfg_iodev = (const struct sensor_read_config *) iodev_sqe->sqe.iodev->data;
 	if (!cfg_iodev->is_streaming) {
@@ -63,4 +67,6 @@ void adxl345_submit(const struct device *dev, struct rtio_iodev_sqe *iodev_sqe)
 	} else {
 		rtio_iodev_sqe_err(iodev_sqe, -ENOTSUP);
 	}
+
+	LOG_INF("done"); // TODO rm
 }
