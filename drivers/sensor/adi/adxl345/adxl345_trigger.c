@@ -25,7 +25,7 @@ static int adxl345_set_int_pad_state(const struct device *dev, uint8_t pad,
 	const struct adxl345_dev_config *cfg = dev->config;
 	int state = en ? GPIO_INT_EDGE_TO_ACTIVE : GPIO_INT_DISABLE;
 
-LOG_INF("INTERRUPT INT_%d -> %s", pad, en ? "ON" : "OFF");
+LOG_INF("INTERRUPT INT_%d -> %s", pad, en ? "ON" : "OFF"); // TODO rm
 
 	/* in case of neither INT_1 nor INT_2 being defined */
 	if (!cfg->gpio_int1.port && !cfg->gpio_int2.port) {
@@ -152,9 +152,10 @@ static void adxl345_int1_gpio_callback(const struct device *dev,
 
 	adxl345_set_int_pad_state(dev, 1, false);
 
-	if (IS_ENABLED(CONFIG_ADXL345_STREAM)) {
-		adxl345_stream_irq_handler(dev); // TODO verify dev is working
-	}
+#ifdef CONFIG_ADXL345_STREAM
+	LOG_INF("STREAM: call adxl345_stream_irq_handler()"); // TODO rm
+	adxl345_stream_irq_handler(dev);
+#endif /* CONFIG_ADXL345_STREAM */
 
 #if defined(CONFIG_ADXL345_TRIGGER_OWN_THREAD)
 	k_sem_give(&drv_data->gpio_sem);
@@ -173,9 +174,10 @@ static void adxl345_int2_gpio_callback(const struct device *dev,
 
 	adxl345_set_int_pad_state(dev, 2, false);
 
-	if (IS_ENABLED(CONFIG_ADXL345_STREAM)) {
-		adxl345_stream_irq_handler(dev);  // TODO verify, dev is working
-	}
+#ifdef CONFIG_ADXL345_STREAM
+	LOG_INF("STREAM: call adxl345_stream_irq_handler()"); // TODO rm
+	adxl345_stream_irq_handler(dev);
+#endif /* CONFIG_ADXL345_STREAM */
 
 #if defined(CONFIG_ADXL345_TRIGGER_OWN_THREAD)
 	k_sem_give(&drv_data->gpio_sem);
@@ -185,14 +187,11 @@ static void adxl345_int2_gpio_callback(const struct device *dev,
 }
 
 #if defined(CONFIG_ADXL345_TRIGGER_OWN_THREAD)
-//static void adxl345_thread(void *p1, void *p2, void *p3) // TODO rm
 static void adxl345_thread(struct adxl345_dev_data *drv_data)
 {
-//	ARG_UNUSED(p2); // TODO rm
-//	ARG_UNUSED(p3);
-//	struct adxl345_dev_data *drv_data = p1;
 	while (true) {
 		k_sem_take(&drv_data->gpio_sem, K_FOREVER);
+// TODO disable TRIGGER ISR if STREAM ISR is enabled
 		adxl345_handle_interrupt(drv_data->dev);
 	}
 }
@@ -205,7 +204,16 @@ static void adxl345_work_cb(struct k_work *work)
 
 LOG_INF("called"); // TODO rm
 
+#if !defined CONFIG_ADXL345_STREAM
+// TODO verify this is working
+	/*
+	 * Make sure, STREAM ISR w/ RTIO is handling the interrupt, and not
+	 * cleaned up afterwards by the TRIGGER handler, if STREAM is enabled.
+	 * So, disable TRIGGER ISR if STREAM is defined.
+	 */
 	adxl345_handle_interrupt(drv_data->dev);
+#endif /* !defined CONFIG_ADXL345_STREAM */
+
 }
 #endif
 

@@ -21,13 +21,6 @@ static const uint8_t adxl345_fifo_ctl_trigger_init[] = {
 	[ADXL345_FIFO_CTL_TRIGGER_UNSET] = ADXL345_INT_UNSET,
 };
 
-static const uint8_t adxl345_fifo_ctl_mode_init[] = {
-	[ADXL345_FIFO_BYPASSED] = ADXL345_FIFO_CTL_MODE_BYPASSED,
-	[ADXL345_FIFO_OLD_SAVED] = ADXL345_FIFO_CTL_MODE_OLD_SAVED,
-	[ADXL345_FIFO_STREAMED] = ADXL345_FIFO_CTL_MODE_STREAMED,
-	[ADXL345_FIFO_TRIGGERED] = ADXL345_FIFO_CTL_MODE_TRIGGERED,
-};
-
 LOG_MODULE_REGISTER(ADXL345, CONFIG_SENSOR_LOG_LEVEL);
 
 #if DT_ANY_INST_ON_BUS_STATUS_OKAY(i2c)
@@ -674,6 +667,10 @@ LOG_INF("called"); // TODO rm
 
 debug_regs(dev); // TODO rm
 
+#ifdef CONFIG_ADXL345_STREAM // TODO test
+	return 0;
+#endif /* CONFIG_ADXL345_STREAM */
+
 	return adxl345_set_measure_en(dev, true);
 }
 
@@ -756,8 +753,9 @@ debug_regs(dev); // TODO rm
 #define ADXL345_DEFINE(inst)								\
 	IF_ENABLED(CONFIG_ADXL345_STREAM, (ADXL345_RTIO_DEFINE(inst)));			\
 	static struct adxl345_dev_data adxl345_data_##inst = {                  \
-	COND_CODE_1(adxl345_iodev_##inst, (.rtio_ctx = &adxl345_rtio_ctx_##inst,        \
-				.iodev = &adxl345_iodev_##inst,), ()) \
+	IF_ENABLED(CONFIG_ADXL345_STREAM, (.rtio_ctx = &adxl345_rtio_ctx_##inst,	\
+	/* COND_CODE_1(adxl345_iodev_##inst, (.rtio_ctx = &adxl345_rtio_ctx_##inst,   */     \
+				.iodev = &adxl345_iodev_##inst,)/*, ()*/) \
 	};     \
 	static const struct adxl345_dev_config adxl345_config_##inst =                  \
 		COND_CODE_1(DT_INST_ON_BUS(inst, spi), (ADXL345_CONFIG_SPI(inst)),      \

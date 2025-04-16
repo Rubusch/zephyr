@@ -85,10 +85,8 @@ static inline void adxl345_accel_convert_q31(q31_t *out, int16_t sample,
 		*out = sample * qscale_factor_no_full_res[range];
 	}
 }
-#ifdef CONFIG_ADXL345_STREAM
 
-// TODO rm, is this used anywhere?
-//#define SENSOR_SCALING_FACTOR			(SENSOR_G / (16 * 1000 / 100))
+#ifdef CONFIG_ADXL345_STREAM
 
 static const uint32_t accel_period_ns[] = {
 	[ADXL345_ODR_12HZ] = UINT32_C(1000000000) / 12,
@@ -181,10 +179,7 @@ static int adxl345_decode_stream(const uint8_t *buffer, struct sensor_chan_spec 
 static int adxl345_decoder_get_frame_count(const uint8_t *buffer, struct sensor_chan_spec chan_spec,
 					   uint16_t *frame_count)
 {
-//	int32_t ret = -ENOTSUP; // TODO rm, refac
-
 	if (chan_spec.chan_idx != 0) {
-//		return ret; // TODO rm, refac
 		return -ENOTSUP;
 	}
 
@@ -245,8 +240,6 @@ static int adxl345_decode_sample(const struct adxl345_xyz_accel_data *data,
 				 uint32_t *fit,
 				 uint16_t max_count,
 				 void *data_out)
-// TODO add selected_range - verify, or keep... ??
-// TODO add is_full_res - verify ??? XXX
 {
 	struct sensor_three_axis_data *out = (struct sensor_three_axis_data *)data_out;
 

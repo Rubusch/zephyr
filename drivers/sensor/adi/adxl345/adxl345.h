@@ -37,6 +37,8 @@
 #define ADXL345_READ_CMD			0x80
 #define ADXL345_MULTIBYTE_FLAG			0x40
 
+// TODO probably rather: 
+//#define ADXL345_REG_READ(x)			(FIELD_GET(GENMASK(5, 0), x) | ADXL345_READ_CMD)
 #define ADXL345_REG_READ(x)			((x & 0xFF) | ADXL345_READ_CMD)
 
 #define ADXL345_COMPLEMENT_MASK(x)		GENMASK(15, (x))
@@ -141,6 +143,13 @@ enum adxl345_fifo_mode {
 	ADXL345_FIFO_TRIGGERED,
 };
 
+static const uint8_t adxl345_fifo_ctl_mode_init[] = {
+	[ADXL345_FIFO_BYPASSED] = ADXL345_FIFO_CTL_MODE_BYPASSED,
+	[ADXL345_FIFO_OLD_SAVED] = ADXL345_FIFO_CTL_MODE_OLD_SAVED,
+	[ADXL345_FIFO_STREAMED] = ADXL345_FIFO_CTL_MODE_STREAMED,
+	[ADXL345_FIFO_TRIGGERED] = ADXL345_FIFO_CTL_MODE_TRIGGERED,
+};
+
 #define ADXL345_FIFO_SAMPLE_SIZE		6
 //#define ADXL345_FIFO_SAMPLE_MASK 0x3F // TODO rm
 //#define ADXL345_FIFO_SAMPLE_NUM  0x1F // TODO rm
@@ -188,11 +197,11 @@ struct adxl345_fifo_config {
 };
 
 struct adxl345_fifo_data {
-	uint8_t is_fifo: 1;
+	uint8_t is_fifo: 1; // TODO needed?
 	uint8_t is_full_res: 1; /* used for conversion in decoder, set by STREAM */
 	enum adxl345_range selected_range: 2; /* determines shift and conversion in decoder, set by STREAM */
-	uint8_t sample_set_size: 4;
-	uint8_t int_status;
+	uint8_t sample_set_size: 4; // TODO needed?
+	uint8_t int_status; // TODO needed? is this cached_int_status?
 	uint16_t accel_odr: 4; // TODO 4bit for odr, then uint16_t bitpacked?!
 	uint16_t fifo_byte_count: 12; // TODO 12 bit for fifo byte count? -> max 32 entries, each 2 bytes,
 				      // 3 axis, makes 192 bytes < 256 bytes -> should fit in 2^8
@@ -269,6 +278,9 @@ struct adxl345_dev_data {
 	uint8_t fifo_samples; // TODO rm, duplicate? in case rename "fifo_samples_current"
 	uint16_t fifo_total_bytes;
 	uint8_t cached_power_ctl;
+	/* debugging */
+	uint8_t cached_debug_reg;
+	uint8_t cached_debug_regval;
 #endif /* CONFIG_ADXL345_STREAM */
 };
 
