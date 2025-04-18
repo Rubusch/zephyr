@@ -35,8 +35,8 @@ void adxl345_submit_stream(const struct device *dev, struct rtio_iodev_sqe *iode
 		uint8_t status;
 	if (fifo_watermark_irq != data->fifo_watermark_irq) {
 		data->fifo_watermark_irq = fifo_watermark_irq;
-		rc = adxl345_reg_write_mask(dev, ADXL345_REG_INT_MAP, ADXL345_INT_WATERMARK,
-						int_value);
+		rc = adxl345_reg_update_bits(dev, ADXL345_REG_INT_MAP,
+					     ADXL345_INT_WATERMARK, int_value);
 		if (rc < 0) {
 			return;
 		}
