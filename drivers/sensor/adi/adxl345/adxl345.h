@@ -173,11 +173,6 @@ struct adxl345_fifo_data {
 	uint64_t timestamp;
 } __attribute__((__packed__));
 
-enum adxl345_op_mode {
-	ADXL345_STANDBY,
-	ADXL345_MEASURE
-};
-
 struct adxl345_sample {
 #ifdef CONFIG_ADXL345_STREAM
 	uint8_t is_fifo: 1;
