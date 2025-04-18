@@ -287,7 +287,6 @@ int adxl345_reg_write_byte(const struct device *dev, uint8_t addr, uint8_t val);
 
 int adxl345_reg_read_byte(const struct device *dev, uint8_t addr, uint8_t *buf);
 
-int adxl345_set_op_mode(const struct device *dev, enum adxl345_op_mode op_mode);
 int adxl345_reg_update_bits(const struct device *dev, uint8_t reg,
 			    uint8_t mask, uint8_t val);
 
