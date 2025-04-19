@@ -431,9 +431,6 @@ static int adxl345_init(const struct device *dev)
 	}
 
 #ifdef CONFIG_ADXL345_TRIGGER
-	data->cached_power_ctl = pwr_ctl;
-	data->cached_int_enable = int_en;
-
 	if (adxl345_init_interrupt(dev)) {
 		/* no interrupt lines configured in DT */
 		LOG_INF("No IRQ lines specified, fallback to FIFO BYPASSED");
