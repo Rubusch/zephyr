@@ -150,7 +150,7 @@ int adxl345_trigger_set(const struct device *dev,
 {
 	const struct adxl345_dev_config *cfg = dev->config;
 	struct adxl345_dev_data *data = dev->data;
-	int rc, status1;
+	int rc;
 
 	if (!cfg->gpio_int1.port && !cfg->gpio_int2.port) {
 		/* might be in FIFO BYPASS mode */
@@ -180,24 +180,7 @@ done:
 		return rc;
 	}
 
-	ret = adxl345_reg_update_bits(dev, ADXL345_REG_INT_MAP,
-				      int_mask, int_en);
-	if (ret < 0) {
-		return ret;
-	}
-	/* Clear status */
-	ret = adxl345_get_status(dev, &status1, NULL);
-	if (ret < 0) {
-		return ret;
-	}
-
-	ret = gpio_pin_interrupt_configure_dt(&cfg->interrupt,
-					      GPIO_INT_EDGE_TO_ACTIVE);
-	if (ret < 0) {
-		return ret;
-	}
-
-	return 0;
+	return adxl345_flush_fifo(dev);
 }
 
 int adxl345_init_interrupt(const struct device *dev)
